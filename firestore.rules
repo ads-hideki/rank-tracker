@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ログイン済み（Firebase Authenticationに登録されたアカウント）のみ許可。
+    // アカウントの追加はFirebaseコンソールで行うため、
+    // 登録済みユーザーの一覧がそのまま「アクセスを許可する人」の一覧になる。
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // キーワード: ログインユーザーのみ読み書き可
+    match /keywords/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 商品マスタ: ログインユーザーのみ読み書き可
+    match /products/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 順位データ: ログインユーザーのみ読み取り可。
+    // 書き込みはスクレイパー（Firebase Admin SDK）のみ。
+    // Admin SDK はこのルールを bypass するため allow write: if false でよい。
+    match /rankings/{id} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+
+    // 実行ステータス: ログインユーザーは読み取りのみ。
+    // 書き込みはスクレイパー（Admin SDK）が担当する。
+    // 以前あった手動実行ボタン（ブラウザからpending書き込み）は廃止済み。
+    match /system/{id} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+
+    // 上記以外は全面禁止
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

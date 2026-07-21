@@ -1,0 +1,28 @@
+{
+  "stores": [
+    {
+      "id": "annekor",
+      "name": "annekor",
+      "platform": "rakuten",
+      "shop_id": "annekor"
+    },
+    {
+      "id": "annekor22",
+      "name": "annekor22",
+      "platform": "rakuten",
+      "shop_id": "annekor22"
+    },
+    {
+      "id": "annekor_yahoo",
+      "name": "annekor (Yahoo)",
+      "platform": "yahoo",
+      "shop_id": "annekor1"
+    }
+  ],
+  "search": {
+    "rakuten_max_pages": 3,
+    "yahoo_max_pages": 4,
+    "results_per_page": 45,
+    "request_interval_sec": 3
+  }
+}
