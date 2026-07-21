@@ -72,46 +72,59 @@ def _scrape_one(kw_text, kw_id, store, store_id, item_id, product_id,
         return False
 
 
-def _update_request_status(status: str, message: str = '',
-                           timestamp_field: str = 'completedAt'):
+def _update_platform_status(platforms, status: str, message: str = '',
+                            timestamp_field: str = 'completedAt'):
     """
-    system/scrapeRequest の status を更新する。失敗しても無視。
+    system/scrapeStatus のプラットフォーム別ステータスを更新する。失敗しても無視。
 
-    ダッシュボードはこのドキュメントを購読して実行状況を表示している。
-    ドキュメントが存在しない場合もあるため update ではなく set(merge=True) を使う。
+    楽天はPC、YahooはGitHub Actionsと実行場所が分かれたため、
+    ダッシュボードには楽天/Yahooを別軸で表示する。ドキュメント構造:
+      { rakuten: {status, startedAt, completedAt, message},
+        yahoo:   {status, startedAt, completedAt, message} }
+    set(merge=True) はマップを再帰的にマージするため、
+    自分のプラットフォームのフィールドだけを安全に更新できる。
     """
     try:
         from firebase_client import get_db
         from firebase_admin import firestore as fs
-        get_db().collection('system').document('scrapeRequest').set({
-            'status':        status,
-            timestamp_field: fs.SERVER_TIMESTAMP,
-            'message':       message,
-        }, merge=True)
+        entry = {'status': status, timestamp_field: fs.SERVER_TIMESTAMP, 'message': message}
+        if timestamp_field == 'startedAt':
+            entry['completedAt'] = None  # 前回の完了時刻をクリアする
+        payload = {p: dict(entry) for p in platforms}
+        get_db().collection('system').document('scrapeStatus').set(payload, merge=True)
     except Exception as e:
-        logger.warning(f'scrapeRequest 更新失敗（無視）: {e}')
+        logger.warning(f'scrapeStatus 更新失敗（無視）: {e}')
 
 
-def run(dry_run: bool = False):
+def run(dry_run: bool = False, platform: str = 'all'):
     from firebase_client import get_active_keywords, get_active_products
 
     config    = load_config()
     today     = date.today().isoformat()
     s_cfg     = config['search']
-    stores    = config['stores']
-    store_map = {s['id']: s for s in stores}
+
+    # プラットフォーム絞り込み（rakuten / yahoo / all）。
+    # store_map を絞ると、商品のstoreItemsも全店舗ループも自動的に対象外になる。
+    all_stores = config['stores']
+    stores     = [s for s in all_stores if platform == 'all' or s['platform'] == platform]
+    store_map  = {s['id']: s for s in stores}
+    run_platforms = sorted({s['platform'] for s in stores})
+
+    if not stores:
+        logger.error(f"platform={platform!r} に該当する店舗がありません")
+        return
 
     keywords    = get_active_keywords()
     products    = get_active_products()
     product_map = {p['id']: p for p in products}
 
-    logger.info(f"=== スクレイピング開始: {today} ===")
-    logger.info(f"キーワード {len(keywords)}件 / 商品 {len(products)}件 / 同時実行数 {MAX_WORKERS}")
+    logger.info(f"=== スクレイピング開始: {today} (platform={platform}) ===")
+    logger.info(f"キーワード {len(keywords)}件 / 商品 {len(products)}件 / 対象店舗 {len(stores)}件 / 同時実行数 {MAX_WORKERS}")
     if dry_run:
         logger.info("【DRY RUN】Firestoreには保存しません")
     else:
         # ダッシュボードに「実行中」を表示させる
-        _update_request_status('running', '', 'startedAt')
+        _update_platform_status(run_platforms, 'running', '', 'startedAt')
 
     total  = 0
     errors = 0
@@ -176,17 +189,21 @@ def run(dry_run: bool = False):
         msg = f"成功 {total - errors}件 / エラー {errors}件"
         logger.info(f"=== 完了: {msg} ===")
         if not dry_run:
-            _update_request_status('done', msg)
+            _update_platform_status(run_platforms, 'done', msg)
 
     except Exception as e:
         logger.error(f"致命的エラー: {e}", exc_info=True)
         if not dry_run:
-            _update_request_status('error', str(e)[:200])
+            _update_platform_status(run_platforms, 'error', str(e)[:200])
         raise
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true', help='Firestoreに保存せずテスト実行')
+    parser.add_argument(
+        '--platform', choices=['rakuten', 'yahoo', 'all'], default='all',
+        help='対象プラットフォーム。楽天=PC、Yahoo=GitHub Actions で分担実行する',
+    )
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=args.dry_run, platform=args.platform)

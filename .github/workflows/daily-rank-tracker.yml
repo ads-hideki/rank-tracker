@@ -1,4 +1,4 @@
-name: 検索順位トラッカー（毎日実行）
+name: 検索順位トラッカー（Yahoo・毎日実行）
 
 on:
   schedule:
@@ -51,9 +51,11 @@ jobs:
           python -c "import json;json.load(open('scraper/serviceAccountKey.json'))"
           echo "serviceAccountKey.json を復元しました"
 
-      - name: スクレイピング実行
+      - name: スクレイピング実行（Yahooのみ）
         working-directory: scraper
-        run: python main.py ${{ inputs.dry_run && '--dry-run' || '' }}
+        # 楽天はデータセンターIPをブロックするため、Yahooのみクラウドで実行する。
+        # 楽天はオフィスPCのタスクスケジューラが担当する。
+        run: python main.py --platform yahoo ${{ inputs.dry_run && '--dry-run' || '' }}
 
       - name: 認証情報を削除
         if: always()

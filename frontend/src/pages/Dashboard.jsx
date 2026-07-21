@@ -9,7 +9,7 @@ export default function Dashboard() {
   const { keywords, loading: kwLoading } = useKeywords()
   const { products, loading: prodLoading } = useProducts()
   const { rankings, loading: todayLoading } = useTodayRankings()
-  const { request } = useScrapeRequest()
+  const { status } = useScrapeRequest()
 
   const today         = localDateString()
   const todayRankings = rankings.filter(r => r.date === today)
@@ -32,16 +32,20 @@ export default function Dashboard() {
         <StatCard label="圏外・未取得"   value={todayLoading ? null : todayOutCount}  unit="件" color="red" />
       </div>
 
-      {/* 自動取得ステータス */}
+      {/* 自動取得ステータス（楽天・Yahoo 別軸）*/}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-500 mb-1.5">自動取得ステータス</p>
-            <ScrapeStatus request={request} />
-          </div>
-          <span className="shrink-0 text-xs text-gray-400 whitespace-nowrap">
-            毎日 10:00 自動実行
-          </span>
+        <p className="text-xs font-medium text-gray-500 mb-3">自動取得ステータス</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <PlatformStatus
+            title="楽天"
+            place="オフィスPC"
+            request={status === undefined ? undefined : status?.rakuten ?? null}
+          />
+          <PlatformStatus
+            title="Yahoo"
+            place="クラウド自動実行"
+            request={status === undefined ? undefined : status?.yahoo ?? null}
+          />
         </div>
       </div>
 
@@ -199,6 +203,19 @@ function formatStamp(ts) {
 
   const day = d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
   return `${day} ${time}`
+}
+
+/** 楽天 / Yahoo それぞれのステータスを1枠で表示する。 */
+function PlatformStatus({ title, place, request }) {
+  return (
+    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-sm font-semibold text-gray-700">{title}</span>
+        <span className="text-[11px] text-gray-400">{place}</span>
+      </div>
+      <ScrapeStatus request={request} />
+    </div>
+  )
 }
 
 function ScrapeStatus({ request }) {

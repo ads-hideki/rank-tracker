@@ -2,27 +2,29 @@ import { useState, useEffect } from 'react'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
-const REF = doc(db, 'system', 'scrapeRequest')
+const REF = doc(db, 'system', 'scrapeStatus')
 
 /**
- * 自動取得の実行状況（読み取り専用）。
+ * 自動取得の実行状況（読み取り専用・プラットフォーム別）。
  *
- * 順位取得は PC のタスクスケジューラが毎日 10:00 に実行する。
- * scraper/main.py が開始時に running、終了時に done / error を書き込むので、
+ * 楽天はオフィスPCのタスクスケジューラ、YahooはGitHub Actionsが実行する。
+ * scraper/main.py が開始時にrunning・終了時にdone/errorを、
+ * system/scrapeStatus の { rakuten:{...}, yahoo:{...} } に書き込むので、
  * ここではそれを購読して表示するだけ。
  *
- * 以前あった「今すぐ順位取得」ボタン（status を pending にして
- * watcher.py に拾わせる仕組み）は廃止した。
+ * status === undefined … 初期ロード中
+ * status === {}         … まだ一度も実行記録がない
+ * status.rakuten / status.yahoo … 各プラットフォームの {status, startedAt, completedAt, message}
  */
 export function useScrapeRequest() {
-  const [request, setRequest] = useState(undefined) // undefined = 初期ロード中
+  const [status, setStatus] = useState(undefined)
 
   useEffect(() => {
     const unsub = onSnapshot(REF, snap => {
-      setRequest(snap.exists() ? snap.data() : null)
+      setStatus(snap.exists() ? snap.data() : {})
     })
     return unsub
   }, [])
 
-  return { request }
+  return { status }
 }
