@@ -2,9 +2,11 @@ name: 検索順位トラッカー（Yahoo・毎日実行）
 
 on:
   schedule:
-    # UTC 01:00 = JST 10:00
-    # 注: GitHub Actions のスケジュールは混雑状況により数分〜数十分遅延することがある
-    - cron: '0 1 * * *'
+    # UTC 01:12 = JST 10:12
+    # 注: GitHub Actions のスケジュールは混雑状況により数分〜数十分遅延することがある。
+    # さらに毎時00分ちょうどは最も混雑して間引かれやすいため、あえて12分にずらしている。
+    # それでもスケジュールは best-effort で、稀に実行が飛ぶことがある（毎日必須ではない前提）。
+    - cron: '12 1 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
