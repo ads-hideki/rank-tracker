@@ -11,7 +11,17 @@ import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import datetime, timezone, timedelta
+
+# 日付は必ず日本時間(JST)で決める。
+# GitHub Actions のランナーは UTC で動くため、date.today() を使うと
+# 深夜〜早朝(JST)の実行で日付が1日前(UTC)になり、ダッシュボード(JST)と
+# 保存先の日付がズレて「本日ぶんが表示されない」不具合になる。
+JST = timezone(timedelta(hours=9))
+
+
+def today_jst() -> str:
+    return datetime.now(JST).date().isoformat()
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -22,7 +32,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
         logging.FileHandler(
-            os.path.join(LOG_DIR, f"{date.today()}.log"),
+            os.path.join(LOG_DIR, f"{datetime.now(timezone(timedelta(hours=9))).date()}.log"),
             encoding='utf-8'
         ),
         logging.StreamHandler(sys.stdout),
@@ -100,7 +110,7 @@ def run(dry_run: bool = False, platform: str = 'all'):
     from firebase_client import get_active_keywords, get_active_products
 
     config    = load_config()
-    today     = date.today().isoformat()
+    today     = today_jst()
     s_cfg     = config['search']
 
     # プラットフォーム絞り込み（rakuten / yahoo / all）。
