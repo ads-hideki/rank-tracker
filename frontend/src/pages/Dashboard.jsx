@@ -38,12 +38,12 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <PlatformStatus
             title="楽天"
-            place="オフィスPC"
+            place="VPS自動実行"
             request={status === undefined ? undefined : status?.rakuten ?? null}
           />
           <PlatformStatus
             title="Yahoo"
-            place="クラウド自動実行"
+            place="VPS自動実行"
             request={status === undefined ? undefined : status?.yahoo ?? null}
           />
         </div>

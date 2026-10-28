@@ -51,33 +51,43 @@ python main.py
 変更する場合は `_MAX_RANK` と `config.json` のページ数の**両方**を合わせること
 （ページ数が足りないと 100位まで到達できない）。
 
-## 現在の運用：Windows タスクスケジューラ
+## 現在の運用：さくらVPS の cron（2026-10-28〜）
 
-社内 PC のタスクスケジューラ `AnnekorRankTracker` で **毎日 10:00** に実行している。
+スクレイパーは **さくらVPS（ubuntu@153.126.152.122）** 上で `scraper/run_vps.sh` を cron から実行している。
+PC には依存しない。
 
-```powershell
-# 状態確認
-Get-ScheduledTask -TaskName 'AnnekorRankTracker' | Get-ScheduledTaskInfo
+| 項目 | 内容 |
+|---|---|
+| 配置 | `~/rank-tracker`（このリポジトリの clone）、venv は `~/rank-tracker/.venv` |
+| 鍵 | `~/rank-tracker/scraper/serviceAccountKey.json`（chmod 600、Git 管理外） |
+| 実行 | `bash ~/rank-tracker/scraper/run_vps.sh >> ~/rank-tracker/cron.log 2>&1` |
+| ログ | `~/rank-tracker/scraper/logs/<JST日付>.log`（30日で自動削除）、ラッパーは `~/rank-tracker/cron.log` |
 
-# 一時停止 / 再開（管理者権限が必要）
-Disable-ScheduledTask -TaskName 'AnnekorRankTracker'
-Enable-ScheduledTask  -TaskName 'AnnekorRankTracker'
+`run_vps.sh` は毎回 `git pull` してから実行するので、**修正は GitHub に push すれば次回実行から反映される**。
+
+```bash
+# 手動実行（VPS 上で）
+bash ~/rank-tracker/scraper/run_vps.sh
+
+# cron の確認 / 編集
+crontab -l
+crontab -e
 ```
 
-登録内容は `scraper/setup_task_scheduler.ps1` を参照。
+### なぜ VPS か（経緯）
 
-### 既知の課題
+- 社内 PC のタスクスケジューラで動かすと、実行中（約33分）は帯域と CPU を消費して PC が重くなる
+- **GitHub Actions / GCP などデータセンターの IP は楽天・Yahoo にブロックされる**（HTTP 200 だが商品リストが空で返り、
+  全件「圏外」として保存されてしまう。エラーにならないので気づきにくい）
+  - 楽天は最初から、Yahoo は 2026-09-11 からブロック
+- さくらVPS の IP からは社内 PC と同じ結果が取れることを確認済み（2026-10-28）
 
-実行中（従来は約40分）は帯域と CPU を消費し、同じ PC での他作業が重くなる。
-100位打ち切りの導入で短縮されたが、根本的には社外実行へ移すのが望ましい。
+## GitHub Actions ワークフロー（停止中）
 
-## GitHub Actions での自動実行（準備済み・未使用）
+`.github/workflows/daily-rank-tracker.yml` は上記の理由で **schedule を無効化**してあり、手動実行（workflow_dispatch）だけ残している。
+データセンター IP では順位が取れないため、**手動実行しても全件「圏外」で上書きされる**。通常は使わないこと。
 
-`.github/workflows/daily-rank-tracker.yml` を用意してあるが、**現在は使っていない**。
-リポジトリを GitHub に push していないため、このファイルは動作しない。
-
-社外実行へ移行する場合に以下の手順で有効化できる。移行後は
-タスクスケジューラ側を必ず停止すること（二重実行になるため）。
+以下は参考として残している当時の手順。
 
 > GitHub Actions のスケジュール実行は、混雑状況によって数分〜数十分遅れることがある。
 > 「10:00 ちょうど」が要件の場合はこの仕組みでは満たせない。
