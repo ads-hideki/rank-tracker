@@ -2,14 +2,12 @@ import { Fragment } from 'react'
 import { useKeywords } from '../hooks/useKeywords'
 import { useProducts } from '../hooks/useProducts'
 import { useTodayRankings, localDateString } from '../hooks/useRankings'
-import { useScrapeRequest } from '../hooks/useScrapeRequest'
 import { STORES } from '../lib/stores'
 
 export default function Dashboard() {
   const { keywords, loading: kwLoading } = useKeywords()
   const { products, loading: prodLoading } = useProducts()
   const { rankings, loading: todayLoading } = useTodayRankings()
-  const { status } = useScrapeRequest()
 
   const today         = localDateString()
   const todayRankings = rankings.filter(r => r.date === today)
@@ -32,23 +30,6 @@ export default function Dashboard() {
         <StatCard label="圏外・未取得"   value={todayLoading ? null : todayOutCount}  unit="件" color="red" />
       </div>
 
-      {/* 自動取得ステータス（楽天・Yahoo 別軸）*/}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 mb-6">
-        <p className="text-xs font-medium text-gray-500 mb-3">自動取得ステータス</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <PlatformStatus
-            title="楽天"
-            place="VPS自動実行"
-            request={status === undefined ? undefined : status?.rakuten ?? null}
-          />
-          <PlatformStatus
-            title="Yahoo"
-            place="VPS自動実行"
-            request={status === undefined ? undefined : status?.yahoo ?? null}
-          />
-        </div>
-      </div>
-
       {/* 本日の順位サマリー */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -67,7 +48,7 @@ export default function Dashboard() {
         ) : todayCount === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-gray-400 text-sm mb-1">本日の順位はまだ取得されていません。</p>
-            <p className="text-gray-300 text-xs">毎日 10:00 の自動取得をお待ちください。</p>
+            <p className="text-gray-300 text-xs">毎日 07:00 の自動取得をお待ちください（実行状況は「設定」タブ）。</p>
           </div>
         ) : (
           <ProductSummaryTable
@@ -190,89 +171,6 @@ function TableSkeleton() {
       ))}
     </div>
   )
-}
-
-/** Firestore Timestamp を「7月21日 10:38」形式に整形する。当日なら時刻のみ。 */
-function formatStamp(ts) {
-  const d = ts?.toDate?.()
-  if (!d) return null
-
-  const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-  const isToday = d.toDateString() === new Date().toDateString()
-  if (isToday) return time
-
-  const day = d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
-  return `${day} ${time}`
-}
-
-/** 楽天 / Yahoo それぞれのステータスを1枠で表示する。 */
-function PlatformStatus({ title, place, request }) {
-  return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-semibold text-gray-700">{title}</span>
-        <span className="text-[11px] text-gray-400">{place}</span>
-      </div>
-      <ScrapeStatus request={request} />
-    </div>
-  )
-}
-
-function ScrapeStatus({ request }) {
-  if (request === undefined) {
-    return <div className="h-5 w-40 bg-gray-100 animate-pulse rounded" />
-  }
-  if (!request) {
-    return <span className="text-sm text-gray-400">実行記録がありません</span>
-  }
-
-  const { status, startedAt, completedAt, message } = request
-
-  // 実行中（main.py が開始時に書き込む）
-  if (status === 'running') {
-    const started = formatStamp(startedAt)
-    return (
-      <span className="flex items-center gap-2 text-sm font-medium text-blue-600">
-        <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-        実行中{started && <span className="font-normal text-gray-500">（{started} 開始）</span>}
-      </span>
-    )
-  }
-
-  // 完了
-  if (status === 'done') {
-    const done = formatStamp(completedAt)
-    return (
-      <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-        <span className="flex items-center gap-2 font-medium text-green-700">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
-          {done ? `${done} 完了` : '完了'}
-        </span>
-        {message && <span className="text-xs text-gray-500">{message}</span>}
-      </div>
-    )
-  }
-
-  // エラー
-  if (status === 'error') {
-    const failed = formatStamp(completedAt)
-    return (
-      <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-        <span className="flex items-center gap-2 font-medium text-red-600">
-          <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
-          {failed ? `${failed} エラー` : 'エラー'}
-        </span>
-        {message && <span className="text-xs text-gray-500">{message}</span>}
-      </div>
-    )
-  }
-
-  // pending は廃止した手動実行ボタンの名残。実行されることはない
-  if (status === 'pending') {
-    return <span className="text-sm text-gray-400">待機中（手動実行は廃止されました）</span>
-  }
-
-  return <span className="text-sm text-gray-400">状態不明</span>
 }
 
 function StatCard({ label, value, unit, color = 'blue' }) {

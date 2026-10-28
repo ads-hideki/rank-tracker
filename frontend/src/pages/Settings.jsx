@@ -2,16 +2,19 @@ import { useState, useEffect } from 'react'
 import { useKeywords } from '../hooks/useKeywords'
 import { useProducts } from '../hooks/useProducts'
 import { useSettings } from '../hooks/useSettings'
+import { useScrapeRequest } from '../hooks/useScrapeRequest'
+import { PlatformStatus } from '../components/ScrapeStatus'
 import { estimateJobs, estimateMinutes, unlinkedCount, SECONDS_PER_JOB } from '../lib/limits'
 
 /**
- * 設定ページ。登録上限（取得設定）の表示と変更。
+ * 設定ページ。自動取得の実行状況と、登録上限（取得設定）の表示・変更。
  * 上限は Firestore system/settings に保存され、キーワード・商品の登録画面とスクレイパーが参照する。
  */
 export default function Settings() {
   const { keywords } = useKeywords()
   const { products } = useProducts()
   const { limits, loaded, updateLimits } = useSettings()
+  const { status } = useScrapeRequest()
 
   const [form, setForm] = useState(limits)
   const [saving, setSaving] = useState(false)
@@ -53,6 +56,26 @@ export default function Settings() {
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
       <h2 className="text-lg font-bold text-gray-900 mb-6">設定</h2>
+
+      {/* 自動取得ステータス（楽天・Yahoo 別軸）*/}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">自動取得ステータス</h3>
+          <span className="text-[11px] text-gray-400">毎日 07:00 にVPSで自動実行</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <PlatformStatus
+            title="楽天"
+            place="VPS自動実行"
+            request={status === undefined ? undefined : status?.rakuten ?? null}
+          />
+          <PlatformStatus
+            title="Yahoo"
+            place="VPS自動実行"
+            request={status === undefined ? undefined : status?.yahoo ?? null}
+          />
+        </div>
+      </div>
 
       {/* 現在の登録量 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
