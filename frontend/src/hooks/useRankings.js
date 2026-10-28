@@ -129,6 +129,36 @@ export function useTodayRankings() {
   return { rankings, loading }
 }
 
+// 本日＋7日前（ダッシュボードの順位一覧用）
+// in クエリで2日分を1クエリで取得し、週間の変動を出す
+export function useDashboardRankings() {
+  const [rankings, setRankings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const today   = localDateString()
+  const weekAgo = localDateString(new Date(Date.now() - 7 * 86_400_000))
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'rankings'),
+      where('date', 'in', [today, weekAgo]),
+    )
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        setRankings(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setLoading(false)
+      },
+      err => {
+        console.error('useDashboardRankings:', err)
+        setLoading(false)
+      },
+    )
+    return unsub
+  }, [today, weekAgo])
+
+  return { rankings, today, weekAgo, loading }
+}
+
 // 直近の最新順位一覧（ダッシュボードテーブル・Rankings ページ用）
 // 取得窓を4日に絞ることで読み込み doc 数を削減
 export function useLatestRankings() {
