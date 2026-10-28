@@ -17,6 +17,21 @@ def get_db():
         _db = firestore.client()
     return _db
 
+DEFAULT_SETTINGS = {
+    'maxKeywordsPerProduct': 3,
+    'maxUnlinkedKeywords':   20,
+    'maxTotalJobs':          1000,  # 0 = 無制限
+}
+
+def get_settings() -> dict:
+    """system/settings（ダッシュボードの取得設定）。無ければ既定値。"""
+    try:
+        snap = get_db().collection('system').document('settings').get()
+        data = snap.to_dict() if snap.exists else {}
+    except Exception:
+        data = {}
+    return {**DEFAULT_SETTINGS, **(data or {})}
+
 def get_active_keywords():
     docs = get_db().collection('keywords').where('active', '==', True).stream()
     return [{'id': d.id, **d.to_dict()} for d in docs]

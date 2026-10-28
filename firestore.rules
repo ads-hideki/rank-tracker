@@ -27,7 +27,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // 実行ステータス: ログインユーザーは読み取りのみ。
+    // 取得設定（登録上限など）: ログインユーザーが画面から変更できる
+    match /system/settings {
+      allow read, write: if isSignedIn();
+    }
+
+    // 実行ステータスなど: ログインユーザーは読み取りのみ。
     // 書き込みはスクレイパー（Admin SDK）が担当する。
     // 以前あった手動実行ボタン（ブラウザからpending書き込み）は廃止済み。
     match /system/{id} {

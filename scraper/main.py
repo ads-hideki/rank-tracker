@@ -42,6 +42,23 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 MAX_WORKERS = 3
+SECONDS_PER_JOB = 7.5  # 1ジョブあたりの実測（2026-10-28 VPS: 209ジョブ=26分、3並列）
+
+
+def _estimate_jobs(keywords, product_map, store_map, stores) -> int:
+    """run() のループと同じ数え方でジョブ数を見積もる。"""
+    n = 0
+    for kw in keywords:
+        product_ids = kw.get('productIds') or []
+        if not product_ids:
+            n += len(stores)
+            continue
+        for pid in product_ids:
+            product = product_map.get(pid)
+            if not product:
+                continue
+            n += sum(1 for sid, iid in (product.get('storeItems') or {}).items() if iid and sid in store_map)
+    return n
 
 
 def load_config() -> dict:
@@ -107,7 +124,7 @@ def _update_platform_status(platforms, status: str, message: str = '',
 
 
 def run(dry_run: bool = False, platform: str = 'all'):
-    from firebase_client import get_active_keywords, get_active_products
+    from firebase_client import get_active_keywords, get_active_products, get_settings
 
     config    = load_config()
     today     = today_jst()
@@ -128,13 +145,23 @@ def run(dry_run: bool = False, platform: str = 'all'):
     products    = get_active_products()
     product_map = {p['id']: p for p in products}
 
+    # 事前見積もり（ダッシュボードの lib/limits.js と同じ計算）。
+    # 画面側で登録時に上限を守らせているので、ここでは警告だけ出して実行は止めない。
+    est_jobs = _estimate_jobs(keywords, product_map, store_map, stores)
+    est_min  = round(est_jobs * SECONDS_PER_JOB / 60)
+    settings = get_settings()
+    max_jobs = settings.get('maxTotalJobs') or 0
+
     logger.info(f"=== スクレイピング開始: {today} (platform={platform}) ===")
     logger.info(f"キーワード {len(keywords)}件 / 商品 {len(products)}件 / 対象店舗 {len(stores)}件 / 同時実行数 {MAX_WORKERS}")
+    logger.info(f"想定ジョブ数 {est_jobs}件 / 約{est_min}分" + (f" / 上限 {max_jobs}件" if max_jobs else ""))
+    if max_jobs and est_jobs > max_jobs:
+        logger.warning(f"想定ジョブ数が上限を超えています（{est_jobs} > {max_jobs}）。ダッシュボードの取得設定を確認してください")
     if dry_run:
         logger.info("【DRY RUN】Firestoreには保存しません")
     else:
         # ダッシュボードに「実行中」を表示させる
-        _update_platform_status(run_platforms, 'running', '', 'startedAt')
+        _update_platform_status(run_platforms, 'running', f'想定 {est_jobs}件 / 約{est_min}分', 'startedAt')
 
     total  = 0
     errors = 0

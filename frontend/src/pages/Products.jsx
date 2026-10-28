@@ -1,13 +1,16 @@
 import { useState, useRef } from 'react'
 import { useProducts } from '../hooks/useProducts'
 import { useKeywords } from '../hooks/useKeywords'
+import { useSettings } from '../hooks/useSettings'
 import { STORES } from '../lib/stores'
+import { checkNewProduct } from '../lib/limits'
 
 const emptyStoreItems = () => Object.fromEntries(STORES.map(s => [s.id, '']))
 
 export default function Products() {
   const { products, loading, addProduct, removeProduct } = useProducts()
   const { keywords, updateKeyword } = useKeywords()
+  const { limits } = useSettings()
   const [form, setForm] = useState({ name: '', sku: '', storeItems: emptyStoreItems() })
   const [selectedKeywordIds, setSelectedKeywordIds] = useState([])
   const [adding, setAdding] = useState(false)
@@ -16,7 +19,7 @@ export default function Products() {
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setTimeout(() => setToast(null), type === 'error' ? 6000 : 3500)
   }
 
   const toggleKeyword = (id) => {
@@ -28,6 +31,11 @@ export default function Products() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) return
+    const check = checkNewProduct({
+      keywords, products, limits,
+      storeItems: form.storeItems, keywordIds: selectedKeywordIds,
+    })
+    if (!check.ok) { showToast(check.reason, 'error'); return }
     setAdding(true)
     try {
       const added = form.name.trim()
@@ -63,9 +71,9 @@ export default function Products() {
 
       {toast && (
         <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${
-          toast.type === 'success'
-            ? 'bg-green-50 text-green-700 border-green-200'
-            : 'bg-blue-50 text-blue-700 border-blue-200'
+          toast.type === 'success' ? 'bg-green-50 text-green-700 border-green-200'
+          : toast.type === 'error' ? 'bg-red-50 text-red-700 border-red-200'
+          : 'bg-blue-50 text-blue-700 border-blue-200'
         }`}>
           {toast.msg}
         </div>
@@ -137,20 +145,30 @@ export default function Products() {
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2">
                 紐づけるキーワード
-                <span className="text-gray-400 font-normal ml-1">（任意・複数選択可）</span>
+                <span className="text-gray-400 font-normal ml-1">
+                  （任意・{limits.maxKeywordsPerProduct} 個まで）
+                </span>
+                <span className={`ml-2 text-xs ${selectedKeywordIds.length >= limits.maxKeywordsPerProduct ? 'text-red-500' : 'text-gray-400'}`}>
+                  {selectedKeywordIds.length}/{limits.maxKeywordsPerProduct}
+                </span>
               </p>
               <div className="flex flex-wrap gap-3 max-h-32 overflow-y-auto">
-                {keywords.map(kw => (
-                  <label key={kw.id} className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedKeywordIds.includes(kw.id)}
-                      onChange={() => toggleKeyword(kw.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">{kw.text}</span>
-                  </label>
-                ))}
+                {keywords.map(kw => {
+                  const checked = selectedKeywordIds.includes(kw.id)
+                  const full = !checked && selectedKeywordIds.length >= limits.maxKeywordsPerProduct
+                  return (
+                    <label key={kw.id} className={`flex items-center gap-1.5 ${full ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={full}
+                        onChange={() => toggleKeyword(kw.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">{kw.text}</span>
+                    </label>
+                  )
+                })}
               </div>
             </div>
           )}

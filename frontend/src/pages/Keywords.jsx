@@ -1,10 +1,16 @@
 import { useState, useRef } from 'react'
 import { useKeywords } from '../hooks/useKeywords'
 import { useProducts } from '../hooks/useProducts'
+import { useSettings } from '../hooks/useSettings'
+import {
+  checkKeywordAssignment, unlinkedCapacity,
+  keywordCountByProduct, unlinkedCount, estimateJobs, estimateMinutes,
+} from '../lib/limits'
 
 export default function Keywords() {
   const { keywords, loading, addKeyword, addKeywordsBatch, removeKeyword, updateKeyword } = useKeywords()
   const { products } = useProducts()
+  const { limits } = useSettings()
   const [input, setInput] = useState('')
   const [selectedProductIds, setSelectedProductIds] = useState([])
   const [adding, setAdding] = useState(false)
@@ -15,10 +21,12 @@ export default function Keywords() {
   const inputRef = useRef()
 
   const productMap = Object.fromEntries(products.map(p => [p.id, p]))
+  const totalJobs  = estimateJobs(keywords, products)
+  const unlinked   = unlinkedCount(keywords)
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setTimeout(() => setToast(null), type === 'error' ? 6000 : 3500)
   }
 
   const toggleProduct = (id) => {
@@ -30,6 +38,8 @@ export default function Keywords() {
   const handleAdd = async (e) => {
     e.preventDefault()
     if (!input.trim()) return
+    const check = checkKeywordAssignment({ keywords, products, limits, productIds: selectedProductIds })
+    if (!check.ok) { showToast(check.reason, 'error'); return }
     setAdding(true)
     try {
       await addKeyword(input, selectedProductIds)
@@ -50,9 +60,23 @@ export default function Keywords() {
     Papa.parse(file, {
       skipEmptyLines: true,
       complete: async ({ data }) => {
-        const texts = data.flat().map(v => String(v).trim()).filter(Boolean)
-        const result = await addKeywordsBatch(texts)
-        showToast(`${result.added}件追加、${result.skipped}件スキップ（重複）`)
+        const texts    = data.flat().map(v => String(v).trim()).filter(Boolean)
+        const existing = new Set(keywords.map(k => k.text))
+        const fresh    = [...new Set(texts)].filter(t => !existing.has(t))
+        const capacity = unlinkedCapacity({ keywords, products, limits })
+        const accepted = fresh.slice(0, capacity)
+        const over     = fresh.length - accepted.length
+        const result   = accepted.length > 0 ? await addKeywordsBatch(accepted) : { added: 0, skipped: 0 }
+        const dup      = texts.length - fresh.length
+        if (over > 0) {
+          showToast(
+            `${result.added}件追加、${dup}件スキップ（重複）。` +
+            `紐づけなしキーワードの上限（${limits.maxUnlinkedKeywords}件）により ${over}件は登録されませんでした`,
+            'error',
+          )
+        } else {
+          showToast(`${result.added}件追加、${dup}件スキップ（重複）`)
+        }
         fileRef.current.value = ''
       },
     })
@@ -75,6 +99,8 @@ export default function Keywords() {
   }
 
   const saveEdit = async (kwId) => {
+    const check = checkKeywordAssignment({ keywords, products, limits, keywordId: kwId, productIds: editProductIds })
+    if (!check.ok) { showToast(check.reason, 'error'); return }
     await updateKeyword(kwId, { productIds: editProductIds })
     setEditingId(null)
     setEditProductIds([])
@@ -87,17 +113,31 @@ export default function Keywords() {
     )
   }
 
+  const toastStyle = {
+    success: 'bg-green-50 text-green-700 border-green-200',
+    info:    'bg-blue-50 text-blue-700 border-blue-200',
+    error:   'bg-red-50 text-red-700 border-red-200',
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl">
       <h2 className="text-lg font-bold text-gray-900 mb-6">キーワード管理</h2>
 
       {toast && (
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${
-          toast.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-        }`}>
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium border ${toastStyle[toast.type]}`}>
           {toast.msg}
         </div>
       )}
+
+      {/* 登録状況（上限に対する使用量） */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 mb-4 grid grid-cols-3 gap-3 text-center">
+        <Usage label="想定ジョブ数" value={totalJobs} max={limits.maxTotalJobs} note={`約${estimateMinutes(totalJobs)}分`} />
+        <Usage label="紐づけなし" value={unlinked} max={limits.maxUnlinkedKeywords} />
+        <div>
+          <p className="text-xs text-gray-500">商品あたり上限</p>
+          <p className="text-lg font-bold text-gray-700">{limits.maxKeywordsPerProduct}<span className="text-xs font-normal text-gray-400 ml-0.5">個</span></p>
+        </div>
+      </div>
 
       {/* 手動追加 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
@@ -122,20 +162,17 @@ export default function Keywords() {
           </div>
           {products.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">対象商品（任意・複数選択可）</p>
-              <div className="flex flex-wrap gap-3">
-                {products.map(p => (
-                  <label key={p.id} className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.includes(p.id)}
-                      onChange={() => toggleProduct(p.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">{p.name}</span>
-                  </label>
-                ))}
-              </div>
+              <p className="text-xs font-medium text-gray-500 mb-2">
+                対象商品（任意・複数選択可）
+                <span className="text-gray-400 font-normal ml-1">各商品 {limits.maxKeywordsPerProduct} 個まで・未選択なら紐づけなし</span>
+              </p>
+              <ProductPicker
+                products={products}
+                selected={selectedProductIds}
+                onToggle={toggleProduct}
+                counts={keywordCountByProduct(keywords)}
+                max={limits.maxKeywordsPerProduct}
+              />
             </div>
           )}
         </form>
@@ -145,7 +182,9 @@ export default function Keywords() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-1">CSV一括登録</h3>
         <p className="text-xs text-gray-400 mb-3">
-          A列にキーワードを1行ずつ記入したCSVをアップロード（重複は自動スキップ）
+          A列にキーワードを1行ずつ記入したCSVをアップロード（重複は自動スキップ）。
+          商品に紐づけない形で登録されるため、上限 {limits.maxUnlinkedKeywords} 件に収まる分だけ受け付けます
+          （あと {unlinkedCapacity({ keywords, products, limits })} 件）
         </p>
         <input
           ref={fileRef}
@@ -174,7 +213,7 @@ export default function Keywords() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm text-gray-800">{kw.text}</span>
-                    {kw.productIds?.length > 0 && (
+                    {kw.productIds?.length > 0 ? (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {kw.productIds.map(pid => {
                           const p = productMap[pid]
@@ -185,6 +224,8 @@ export default function Keywords() {
                           ) : null
                         })}
                       </div>
+                    ) : (
+                      <span className="ml-2 text-xs text-gray-400">紐づけなし（全店舗）</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
@@ -210,18 +251,14 @@ export default function Keywords() {
                     {products.length === 0 ? (
                       <p className="text-xs text-gray-400">商品が登録されていません</p>
                     ) : (
-                      <div className="flex flex-wrap gap-3 mb-2">
-                        {products.map(p => (
-                          <label key={p.id} className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={editProductIds.includes(p.id)}
-                              onChange={() => toggleEditProduct(p.id)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">{p.name}</span>
-                          </label>
-                        ))}
+                      <div className="mb-2">
+                        <ProductPicker
+                          products={products}
+                          selected={editProductIds}
+                          onToggle={toggleEditProduct}
+                          counts={keywordCountByProduct(keywords, kw.id)}
+                          max={limits.maxKeywordsPerProduct}
+                        />
                       </div>
                     )}
                     <div className="flex gap-2">
@@ -244,6 +281,69 @@ export default function Keywords() {
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** 上限に対する使用量。90% 以上で黄色、上限到達で赤。 */
+function Usage({ label, value, max, note }) {
+  const unlimited = !max || max <= 0
+  const ratio = unlimited ? 0 : value / max
+  const color = ratio >= 1 ? 'text-red-600' : ratio >= 0.9 ? 'text-yellow-600' : 'text-gray-700'
+  return (
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`text-lg font-bold ${color}`}>
+        {value}
+        <span className="text-xs font-normal text-gray-400 ml-0.5">/ {unlimited ? '無制限' : max}</span>
+      </p>
+      {note && <p className="text-[11px] text-gray-400">{note}</p>}
+    </div>
+  )
+}
+
+/**
+ * 商品のチェックボックス一覧。各商品の「現在の紐づけ数/上限」を表示し、
+ * 上限に達した商品は（既に選択済みでなければ）選べない。
+ * 商品が多いときは絞り込み欄を出す。
+ */
+function ProductPicker({ products, selected, onToggle, counts, max }) {
+  const [filter, setFilter] = useState('')
+  const shown = filter
+    ? products.filter(p => (p.name + ' ' + (p.sku || '')).toLowerCase().includes(filter.toLowerCase()))
+    : products
+  return (
+    <div>
+      {products.length > 12 && (
+        <input
+          type="text"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="商品名・SKUで絞り込み"
+          className="mb-2 w-full sm:w-64 border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      )}
+      <div className="flex flex-wrap gap-3 max-h-48 overflow-y-auto">
+        {shown.map(p => {
+          const n = counts[p.id] || 0
+          const checked = selected.includes(p.id)
+          const full = !checked && n >= max
+          return (
+            <label key={p.id} className={`flex items-center gap-1.5 ${full ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={full}
+                onChange={() => onToggle(p.id)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">{p.name}</span>
+              <span className={`text-[11px] ${n >= max ? 'text-red-500' : 'text-gray-400'}`}>{n}/{max}</span>
+            </label>
+          )
+        })}
+        {shown.length === 0 && <span className="text-xs text-gray-400">該当する商品がありません</span>}
       </div>
     </div>
   )

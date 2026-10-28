@@ -57,6 +57,33 @@ def _extract_page_items(soup: BeautifulSoup) -> list[tuple[str, str]]:
     return items
 
 
+# 5xx や接続エラーは一時的なことが多いので、数秒待って最大2回まで再試行する
+# （楽天側と同じ方針。rakuten_scraper.py の _get_with_retry と同じ実装）。
+_RETRY_STATUSES = {500, 502, 503, 504}
+_RETRY_WAITS = (5, 10)  # 秒
+
+
+def _get_with_retry(session: requests.Session, url: str, label: str):
+    """GET して Response を返す。再試行しても失敗したら None。4xx は再試行しない。"""
+    for attempt, wait in enumerate((0,) + _RETRY_WAITS):
+        if wait:
+            logger.info(f"  {label} {wait}秒後に再試行 ({attempt}/{len(_RETRY_WAITS)})")
+            time.sleep(wait)
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code in _RETRY_STATUSES:
+                logger.warning(f"{label}リクエスト失敗: HTTP {resp.status_code}")
+                continue
+            resp.raise_for_status()
+            return resp
+        except requests.HTTPError as e:
+            logger.warning(f"{label}リクエスト失敗: {e}")
+            return None
+        except requests.RequestException as e:
+            logger.warning(f"{label}リクエスト失敗: {e}")
+    return None
+
+
 def get_yahoo_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3) -> int | None:
     """
     Yahoo!ショッピングでキーワード検索し、shop_id の商品の最初の掲載順位を返す。
@@ -76,11 +103,8 @@ def get_yahoo_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: i
             f"?p={quote(keyword)}&b={start}&n={_RESULTS_PER_PAGE}&s=1"
         )
         logger.debug(f"  GET {url}")
-        try:
-            resp = session.get(url, timeout=20)
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            logger.warning(f"Yahooリクエスト失敗 page={page}: {e}")
+        resp = _get_with_retry(session, url, f"Yahoo page={page}")
+        if resp is None:
             break
 
         soup = BeautifulSoup(resp.text, 'lxml')

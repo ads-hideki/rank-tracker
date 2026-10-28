@@ -56,6 +56,33 @@ def _is_pr_item(item) -> bool:
     return False
 
 
+# 5xx や接続エラーは一時的なことが多い（2026-10-28 に楽天が 503 を返し、該当キーワードが
+# 「圏外」として保存された）。数秒待って最大2回まで再試行する。
+_RETRY_STATUSES = {500, 502, 503, 504}
+_RETRY_WAITS = (5, 10)  # 秒
+
+
+def _get_with_retry(session: requests.Session, url: str, label: str):
+    """GET して Response を返す。再試行しても失敗したら None。4xx は再試行しない。"""
+    for attempt, wait in enumerate((0,) + _RETRY_WAITS):
+        if wait:
+            logger.info(f"  {label} {wait}秒後に再試行 ({attempt}/{len(_RETRY_WAITS)})")
+            time.sleep(wait)
+        try:
+            resp = session.get(url, timeout=20)
+            if resp.status_code in _RETRY_STATUSES:
+                logger.warning(f"{label}リクエスト失敗: HTTP {resp.status_code}")
+                continue
+            resp.raise_for_status()
+            return resp
+        except requests.HTTPError as e:
+            logger.warning(f"{label}リクエスト失敗: {e}")
+            return None
+        except requests.RequestException as e:
+            logger.warning(f"{label}リクエスト失敗: {e}")
+    return None
+
+
 def get_rakuten_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3) -> int | None:
     """
     楽天市場でキーワード検索し、shop_id の商品のオーガニック順位を返す。
@@ -69,11 +96,8 @@ def get_rakuten_rank(keyword: str, shop_id: str, item_id: str = None, max_pages:
     for page in range(1, max_pages + 1):
         url = f"https://search.rakuten.co.jp/search/mall/{quote(keyword)}/?p={page}"
         logger.debug(f"  GET {url}")
-        try:
-            resp = session.get(url, timeout=20)
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            logger.warning(f"楽天リクエスト失敗 page={page}: {e}")
+        resp = _get_with_retry(session, url, f"楽天 page={page}")
+        if resp is None:
             break
 
         soup = BeautifulSoup(resp.text, 'lxml')
