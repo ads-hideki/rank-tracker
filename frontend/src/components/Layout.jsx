@@ -7,6 +7,7 @@ const NAV = [
   { to: '/rankings',         icon: '▲', label: '順位詳細' },
   { to: '/products',         icon: '□', label: '商品マスタ' },
   { to: '/product-rankings', icon: '▶', label: '商品別順位' },
+  { to: '/settings',         icon: '⚙', label: '設定' },
 ]
 
 export default function Layout({ user, onLogout }) {

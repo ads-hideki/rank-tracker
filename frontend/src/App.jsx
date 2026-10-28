@@ -9,6 +9,7 @@ const Keywords       = lazy(() => import('./pages/Keywords'))
 const Rankings       = lazy(() => import('./pages/Rankings'))
 const Products       = lazy(() => import('./pages/Products'))
 const ProductRankings = lazy(() => import('./pages/ProductRankings'))
+const Settings       = lazy(() => import('./pages/Settings'))
 
 function PageLoader() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="rankings"         element={<Rankings />} />
             <Route path="products"         element={<Products />} />
             <Route path="product-rankings" element={<ProductRankings />} />
+            <Route path="settings"         element={<Settings />} />
           </Route>
         </Routes>
       </Suspense>
