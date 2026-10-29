@@ -7,15 +7,53 @@ import { checkNewProduct } from '../lib/limits'
 
 const emptyStoreItems = () => Object.fromEntries(STORES.map(s => [s.id, '']))
 
+/** 品番（SKU）順。SKU 未設定は末尾。 */
+const bySku = (a, b) => {
+  if (!a.sku && !b.sku) return 0
+  if (!a.sku) return 1
+  if (!b.sku) return -1
+  return a.sku.localeCompare(b.sku, 'ja', { numeric: true })
+}
+
 export default function Products() {
-  const { products, loading, addProduct, removeProduct } = useProducts()
+  const { products, loading, addProduct, removeProduct, updateProduct } = useProducts()
   const { keywords, updateKeyword } = useKeywords()
   const { limits } = useSettings()
   const [form, setForm] = useState({ name: '', sku: '', storeItems: emptyStoreItems() })
   const [selectedKeywordIds, setSelectedKeywordIds] = useState([])
   const [adding, setAdding] = useState(false)
   const [toast, setToast] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   const nameRef = useRef()
+
+  const sortedProducts = [...products].sort(bySku)
+
+  const startEdit = (p) => {
+    setEditingId(p.id)
+    setEditForm({
+      name: p.name || '',
+      sku: p.sku || '',
+      storeItems: { ...emptyStoreItems(), ...(p.storeItems || {}) },
+    })
+  }
+  const cancelEdit = () => { setEditingId(null); setEditForm(null) }
+  const saveEdit = async () => {
+    if (!editForm.name.trim()) { showToast('商品名は必須です', 'error'); return }
+    setSavingEdit(true)
+    try {
+      await updateProduct(editingId, {
+        name: editForm.name.trim(),
+        sku: editForm.sku.trim(),
+        storeItems: Object.fromEntries(STORES.map(s => [s.id, (editForm.storeItems[s.id] || '').trim()])),
+      })
+      showToast(`「${editForm.name.trim()}」を更新しました`)
+      cancelEdit()
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -199,33 +237,51 @@ export default function Products() {
           <>
             {/* モバイル：カード表示 */}
             <ul className="md:hidden divide-y divide-gray-100">
-              {products.map(p => (
+              {sortedProducts.map(p => (
                 <li key={p.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                      {p.sku && (
-                        <p className="text-xs text-gray-400 mt-0.5">SKU: {p.sku}</p>
-                      )}
-                      <div className="mt-1.5 space-y-0.5">
-                        {STORES.map(s => {
-                          const code = p.storeItems?.[s.id]
-                          return code ? (
-                            <p key={s.id} className="text-xs text-gray-500">
-                              <span className="text-gray-400">{s.label}:</span>{' '}
-                              <span className="font-mono">{code}</span>
-                            </p>
-                          ) : null
-                        })}
+                  {editingId === p.id ? (
+                    <ProductEditForm
+                      form={editForm}
+                      setForm={setEditForm}
+                      onSave={saveEdit}
+                      onCancel={cancelEdit}
+                      saving={savingEdit}
+                    />
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">
+                          {p.sku && <span className="font-mono text-xs text-gray-400 mr-2">{p.sku}</span>}
+                          {p.name}
+                        </p>
+                        <div className="mt-1.5 space-y-0.5">
+                          {STORES.map(s => {
+                            const code = p.storeItems?.[s.id]
+                            return code ? (
+                              <p key={s.id} className="text-xs text-gray-500">
+                                <span className="text-gray-400">{s.label}:</span>{' '}
+                                <span className="font-mono">{code}</span>
+                              </p>
+                            ) : null
+                          })}
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-1">
+                        <button
+                          onClick={() => startEdit(p)}
+                          className="text-xs text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded hover:bg-blue-50"
+                        >
+                          編集
+                        </button>
+                        <button
+                          onClick={() => handleRemove(p)}
+                          className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                        >
+                          削除
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleRemove(p)}
-                      className="shrink-0 text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                    >
-                      削除
-                    </button>
-                  </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -235,8 +291,8 @@ export default function Products() {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500">商品名</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">SKU</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">品番（SKU）</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">商品名</th>
                     {STORES.map(s => (
                       <th key={s.id} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
                         {s.label}<br />
@@ -247,30 +303,102 @@ export default function Products() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {products.map(p => (
-                    <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 font-medium text-gray-800">{p.name}</td>
-                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.sku || '-'}</td>
-                      {STORES.map(s => (
-                        <td key={s.id} className="px-4 py-3 text-gray-600 font-mono text-xs">
-                          {p.storeItems?.[s.id] || <span className="text-gray-300">-</span>}
+                  {sortedProducts.map(p => (
+                    editingId === p.id ? (
+                      <tr key={p.id} className="bg-blue-50/30">
+                        <td colSpan={3 + STORES.length} className="px-5 py-4">
+                          <ProductEditForm
+                            form={editForm}
+                            setForm={setEditForm}
+                            onSave={saveEdit}
+                            onCancel={cancelEdit}
+                            saving={savingEdit}
+                          />
                         </td>
-                      ))}
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleRemove(p)}
-                          className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                        >
-                          削除
-                        </button>
-                      </td>
-                    </tr>
+                      </tr>
+                    ) : (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-600 font-mono text-xs whitespace-nowrap">{p.sku || <span className="text-gray-300">-</span>}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
+                        {STORES.map(s => (
+                          <td key={s.id} className="px-4 py-3 text-gray-600 font-mono text-xs">
+                            {p.storeItems?.[s.id] || <span className="text-gray-300">-</span>}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="text-xs text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded hover:bg-blue-50"
+                          >
+                            編集
+                          </button>
+                          <button
+                            onClick={() => handleRemove(p)}
+                            className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                          >
+                            削除
+                          </button>
+                        </td>
+                      </tr>
+                    )
                   ))}
                 </tbody>
               </table>
             </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** 商品の編集フォーム（商品名・品番・店舗別商品コード）。一覧の行の中に展開する。 */
+function ProductEditForm({ form, setForm, onSave, onCancel, saving }) {
+  const input = 'w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">商品名 <span className="text-red-400">*</span></label>
+          <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={input} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">品番（SKU）</label>
+          <input type="text" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} className={input} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {STORES.map(s => (
+          <div key={s.id}>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{s.label} 商品コード</label>
+            <input
+              type="text"
+              value={form.storeItems[s.id] || ''}
+              onChange={e => setForm(f => ({ ...f, storeItems: { ...f.storeItems, [s.id]: e.target.value } }))}
+              placeholder={s.platform === 'rakuten' ? '例: ads-007' : '例: ads007'}
+              className={`${input} font-mono`}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-400">
+        商品コードを変えると、翌日の取得からその商品コードで順位を探します。過去の順位データはそのまま残ります。
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={onSave}
+          disabled={saving || !form.name.trim()}
+          className="px-4 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? '保存中...' : '保存'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="px-3 py-1.5 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          キャンセル
+        </button>
       </div>
     </div>
   )
