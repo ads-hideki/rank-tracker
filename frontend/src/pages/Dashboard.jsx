@@ -163,10 +163,11 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
   return (
     <div>
       <table className="w-full text-sm table-fixed">
+        {/* キーワード列と店舗列は固定幅。残りの幅を日付列が均等に分け合う（画面が広いほど順位列が広がる） */}
         <colgroup>
-          <col />
-          {showStoreColumn && <col className={compact ? 'w-[28px]' : 'w-[128px]'} />}
-          {dates.map(d => <col key={d} className="w-[44px] sm:w-[54px]" />)}
+          <col className="w-[150px] sm:w-[230px] lg:w-[260px]" />
+          {showStoreColumn && <col className={compact ? 'w-[28px]' : 'w-[120px]'} />}
+          {dates.map(d => <col key={d} />)}
         </colgroup>
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
@@ -232,15 +233,15 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
 /** 順位セル。順位帯で色分け：1〜10位=緑、11〜30位=黄、31位以降=無色、圏外=灰、データ無し=「-」 */
 function RankCell({ r }) {
   if (!r) {
-    return <td className="px-1 py-1.5 text-center text-gray-200 border-l border-gray-50">-</td>
+    return <td className="px-1 py-2 text-center text-gray-200 border-l border-gray-50">-</td>
   }
   if (r.rank == null) {
-    return <td className="px-1 py-1.5 text-center text-[10px] text-gray-400 bg-gray-100/80 border-l border-gray-50">圏外</td>
+    return <td className="px-1 py-2 text-center text-[11px] sm:text-xs text-gray-400 bg-gray-100/80 border-l border-gray-50">圏外</td>
   }
   const band = r.rank <= 10 ? 'bg-green-50 text-green-800 font-semibold'
     : r.rank <= 30 ? 'bg-yellow-50 text-yellow-800'
     : 'text-gray-700'
-  return <td className={`px-1 py-1.5 text-center font-mono text-xs border-l border-gray-50 ${band}`}>{r.rank}</td>
+  return <td className={`px-1 py-2 text-center font-mono text-xs sm:text-sm border-l border-gray-50 ${band}`}>{r.rank}</td>
 }
 
 function Legend() {
