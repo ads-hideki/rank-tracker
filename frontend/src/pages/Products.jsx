@@ -4,6 +4,7 @@ import { useKeywords } from '../hooks/useKeywords'
 import { useSettings } from '../hooks/useSettings'
 import { STORES } from '../lib/stores'
 import { checkNewProduct } from '../lib/limits'
+import { TEPS, fetchTepsSkuMaster, buildCandidates, splitNewAndExisting } from '../lib/teps'
 
 const emptyStoreItems = () => Object.fromEntries(STORES.map(s => [s.id, '']))
 
@@ -116,6 +117,8 @@ export default function Products() {
           {toast.msg}
         </div>
       )}
+
+      <TepsImport products={products} addProduct={addProduct} showToast={showToast} />
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">新規登録</h3>
@@ -348,6 +351,146 @@ export default function Products() {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * TēPs（売上・在庫管理）の商品マスタから商品を取り込む。
+ * 読み込み → 新規だけをプレビュー（チェックで選択）→ 登録。登録済みの商品は触らない。
+ */
+function TepsImport({ products, addProduct, showToast }) {
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState({ loading: false, error: '', fresh: null, existing: 0, old: 0, total: 0 })
+  const [selected, setSelected] = useState(new Set())
+  const [saving, setSaving] = useState(false)
+
+  const load = async () => {
+    setState(s => ({ ...s, loading: true, error: '' }))
+    try {
+      const docs = await fetchTepsSkuMaster()
+      const all  = buildCandidates(docs)
+      const cands = all.filter(c => !c.old)
+      const { fresh, existing } = splitNewAndExisting(cands, products)
+      setState({ loading: false, error: '', fresh, existing: existing.length, old: all.length - cands.length, total: docs.length })
+      setSelected(new Set(fresh.map(c => c.sku)))
+    } catch (e) {
+      setState(s => ({ ...s, loading: false, error: e.message || String(e) }))
+    }
+  }
+
+  const toggle = sku => setSelected(prev => {
+    const n = new Set(prev); n.has(sku) ? n.delete(sku) : n.add(sku); return n
+  })
+  const toggleAll = () => setSelected(prev =>
+    prev.size === state.fresh.length ? new Set() : new Set(state.fresh.map(c => c.sku)))
+
+  const register = async () => {
+    const targets = state.fresh.filter(c => selected.has(c.sku))
+    if (targets.length === 0) return
+    if (!window.confirm(`${targets.length} 件の商品を登録します。よろしいですか？`)) return
+    setSaving(true)
+    let done = 0
+    try {
+      for (const c of targets) {
+        await addProduct({ name: c.name, sku: c.sku, storeItems: c.storeItems })
+        done++
+      }
+      showToast(`TēPs から ${done} 件を登録しました`)
+      setState(s => ({ ...s, fresh: s.fresh.filter(c => !selected.has(c.sku)), existing: s.existing + done }))
+      setSelected(new Set())
+    } catch (e) {
+      showToast(`${done} 件登録後にエラー: ${e.message || e}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+      >
+        <span className="text-sm font-semibold text-gray-700">
+          TēPs（売上・在庫管理）から取り込み
+          <span className="ml-2 text-xs font-normal text-gray-400">新しい商品だけを追加。登録済みの商品は変更しません</span>
+        </span>
+        <span className="text-gray-400 text-xs">{open ? '閉じる ▲' : '開く ▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+          <p className="text-xs text-gray-500 mb-3">
+            TēPs の品番（SKU）を楽天・Yahoo のページ単位にまとめ、
+            楽天は <span className="font-mono">manage_number</span>、Yahoo は <span className="font-mono">product_code</span> を商品コードとして登録します。
+            名前に「旧」を含む商品と、どちらのコードも無い商品は対象外です。
+            （<a href={TEPS.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">TēPs を開く</a>）
+          </p>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={load}
+              disabled={state.loading}
+              className="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            >
+              {state.loading ? '読み込み中...' : state.fresh ? '再読み込み' : 'TēPs を読み込む'}
+            </button>
+            {state.fresh && (
+              <span className="text-xs text-gray-500">
+                TēPs {state.total} SKU → 商品 {state.fresh.length + state.existing} 件（登録済み {state.existing} / <b className="text-gray-800">新規 {state.fresh.length}</b>）、「旧」{state.old} 件を除外
+              </span>
+            )}
+          </div>
+          {state.error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{state.error}</p>}
+
+          {state.fresh && state.fresh.length === 0 && (
+            <p className="text-sm text-gray-400">新しく追加できる商品はありません。</p>
+          )}
+
+          {state.fresh && state.fresh.length > 0 && (
+            <>
+              <div className="overflow-y-auto max-h-96 border border-gray-200 rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left w-8">
+                        <input type="checkbox" checked={selected.size === state.fresh.length} onChange={toggleAll} className="rounded border-gray-300 text-blue-600" />
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">品番</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">商品名</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">楽天（2店舗共通）</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">Yahoo</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">SKU数</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {state.fresh.map(c => (
+                      <tr key={c.sku} className={`hover:bg-gray-50 ${selected.has(c.sku) ? '' : 'opacity-50'}`}>
+                        <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(c.sku)} onChange={() => toggle(c.sku)} className="rounded border-gray-300 text-blue-600" /></td>
+                        <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.sku}</td>
+                        <td className="px-3 py-1.5 text-gray-800">{c.name}</td>
+                        <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.storeItems.annekor || <span className="text-gray-300">-</span>}</td>
+                        <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.storeItems.annekor_yahoo || <span className="text-gray-300">-</span>}</td>
+                        <td className="px-3 py-1.5 text-gray-400">{c.variants.length}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={register}
+                  disabled={saving || selected.size === 0}
+                  className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {saving ? '登録中...' : `選択した ${selected.size} 件を登録`}
+                </button>
+                <span className="text-xs text-gray-400">登録後は一覧の「編集」で名前や商品コードを直せます</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
