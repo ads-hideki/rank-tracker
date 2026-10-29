@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
@@ -119,7 +120,10 @@ function Diff({ value }) {
 export default function ProductRankings() {
   const { products, loading: prodLoading } = useProducts()
   const { keywords, loading: kwLoading } = useKeywords()
-  const [selectedProductId, setSelectedProductId] = useState('')
+  // 選択中の商品は URL（?product=ID）に持つ。ダッシュボードの「詳細 →」から直接開ける
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedProductId = searchParams.get('product') || ''
+  const setSelectedProductId = id => setSearchParams(id ? { product: id } : {}, { replace: true })
   const [expandedKwId, setExpandedKwId] = useState(null)
 
   const sortedProducts = [...products].sort((a, b) => {

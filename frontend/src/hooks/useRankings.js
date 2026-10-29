@@ -129,18 +129,20 @@ export function useTodayRankings() {
   return { rankings, loading }
 }
 
-// 本日＋7日前（ダッシュボードの順位一覧用）
-// in クエリで2日分を1クエリで取得し、週間の変動を出す
-export function useDashboardRankings() {
+// 本日〜7日前の8日分（ダッシュボードの順位一覧用）
+// in クエリで8日分を1クエリで取得。dates は新しい順（[0] が本日）
+export function useDashboardRankings(days = 8) {
   const [rankings, setRankings] = useState([])
   const [loading, setLoading] = useState(true)
-  const today   = localDateString()
-  const weekAgo = localDateString(new Date(Date.now() - 7 * 86_400_000))
+  const dates = Array.from({ length: days }, (_, i) =>
+    localDateString(new Date(Date.now() - i * 86_400_000)),
+  )
+  const key = dates.join(',')
 
   useEffect(() => {
     const q = query(
       collection(db, 'rankings'),
-      where('date', 'in', [today, weekAgo]),
+      where('date', 'in', dates),
     )
     const unsub = onSnapshot(
       q,
@@ -154,9 +156,11 @@ export function useDashboardRankings() {
       },
     )
     return unsub
-  }, [today, weekAgo])
+    // dates は毎レンダー新しい配列になるので、文字列化した key を依存にする
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
 
-  return { rankings, today, weekAgo, loading }
+  return { rankings, dates, loading }
 }
 
 // 直近の最新順位一覧（ダッシュボードテーブル・Rankings ページ用）
