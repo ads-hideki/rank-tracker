@@ -363,6 +363,7 @@ function TepsImport({ products, addProduct, showToast }) {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState({ loading: false, error: '', fresh: null, existing: 0, old: 0, total: 0 })
   const [selected, setSelected] = useState(new Set())
+  const [choice, setChoice] = useState({})   // sku → 選んだ annekor22 コード（候補が複数ある商品のみ）
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
@@ -374,10 +375,13 @@ function TepsImport({ products, addProduct, showToast }) {
       const { fresh, existing } = splitNewAndExisting(cands, products)
       setState({ loading: false, error: '', fresh, existing: existing.length, old: all.length - cands.length, total: docs.length })
       setSelected(new Set(fresh.map(c => c.sku)))
+      setChoice(Object.fromEntries(fresh.map(c => [c.sku, c.storeItems.annekor22])))
     } catch (e) {
       setState(s => ({ ...s, loading: false, error: e.message || String(e) }))
     }
   }
+
+  const annekor22Of = c => (c.sku in choice ? choice[c.sku] : c.storeItems.annekor22)
 
   const toggle = sku => setSelected(prev => {
     const n = new Set(prev); n.has(sku) ? n.delete(sku) : n.add(sku); return n
@@ -393,7 +397,7 @@ function TepsImport({ products, addProduct, showToast }) {
     let done = 0
     try {
       for (const c of targets) {
-        await addProduct({ name: c.name, sku: c.sku, storeItems: c.storeItems })
+        await addProduct({ name: c.name, sku: c.sku, storeItems: { ...c.storeItems, annekor22: annekor22Of(c) } })
         done++
       }
       showToast(`TēPs から ${done} 件を登録しました`)
@@ -422,8 +426,10 @@ function TepsImport({ products, addProduct, showToast }) {
       {open && (
         <div className="px-5 pb-5 border-t border-gray-100 pt-4">
           <p className="text-xs text-gray-500 mb-3">
-            TēPs の品番（SKU）を楽天・Yahoo のページ単位にまとめ、
-            楽天は <span className="font-mono">manage_number</span>、Yahoo は <span className="font-mono">product_code</span> を商品コードとして登録します。
+            TēPs の品番（SKU）を楽天・Yahoo のページ単位にまとめて登録します。
+            楽天 annekor は <span className="font-mono">manage_number</span>、楽天 annekor22 は店舗2のSKU（<span className="font-mono">rakuten2_sku</span>）から導いた管理番号、
+            Yahoo は <span className="font-mono">product_code</span> を商品コードにします。
+            annekor22 の候補が複数ある商品は「要確認」と表示するので、正しい方を選んでください（楽天の商品ページURL <span className="font-mono">item.rakuten.co.jp/annekor22/コード/</span> が開くものが正）。
             名前に「旧」を含む商品と、どちらのコードも無い商品は対象外です。
             （<a href={TEPS.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">TēPs を開く</a>）
           </p>
@@ -458,7 +464,8 @@ function TepsImport({ products, addProduct, showToast }) {
                       </th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">品番</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">商品名</th>
-                      <th className="px-3 py-2 text-left font-semibold text-gray-500">楽天（2店舗共通）</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">楽天 annekor</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-500">楽天 annekor22</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">Yahoo</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-500">SKU数</th>
                     </tr>
@@ -470,6 +477,23 @@ function TepsImport({ products, addProduct, showToast }) {
                         <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.sku}</td>
                         <td className="px-3 py-1.5 text-gray-800">{c.name}</td>
                         <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.storeItems.annekor || <span className="text-gray-300">-</span>}</td>
+                        <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">
+                          {c.needsReview ? (
+                            <span className="flex items-center gap-1.5">
+                              <select
+                                value={annekor22Of(c)}
+                                onChange={e => setChoice(prev => ({ ...prev, [c.sku]: e.target.value }))}
+                                className="border border-yellow-400 bg-yellow-50 rounded px-1.5 py-0.5 text-xs font-mono"
+                              >
+                                {c.annekor22Candidates.map(x => <option key={x} value={x}>{x}</option>)}
+                                <option value="">（出品なし・対象外）</option>
+                              </select>
+                              <span className="text-[10px] text-yellow-700 whitespace-nowrap" title={c.reviewNote}>要確認</span>
+                            </span>
+                          ) : (
+                            annekor22Of(c) || <span className="text-gray-300" title="店舗2のSKUが無いため対象外">-</span>
+                          )}
+                        </td>
                         <td className="px-3 py-1.5 font-mono text-gray-600 whitespace-nowrap">{c.storeItems.annekor_yahoo || <span className="text-gray-300">-</span>}</td>
                         <td className="px-3 py-1.5 text-gray-400">{c.variants.length}</td>
                       </tr>
