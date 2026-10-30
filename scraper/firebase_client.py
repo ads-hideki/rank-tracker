@@ -21,6 +21,7 @@ DEFAULT_SETTINGS = {
     'maxKeywordsPerProduct': 3,
     'maxUnlinkedKeywords':   20,
     'maxTotalJobs':          1000,  # 0 = 無制限
+    'maxRank':               50,    # 追跡する順位の上限。これを超えたら「圏外」として打ち切る
 }
 
 def get_settings() -> dict:

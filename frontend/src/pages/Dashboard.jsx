@@ -5,6 +5,7 @@ import { useProducts } from '../hooks/useProducts'
 import { useDashboardRankings } from '../hooks/useRankings'
 import { STORES, STORE_COLORS } from '../lib/stores'
 import { RUN_TIME_LABEL } from '../lib/schedule'
+import { useSettings } from '../hooks/useSettings'
 
 /** 'YYYY-MM-DD' → 'M/D' */
 const fmtDate = d => `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const { keywords, loading: kwLoading, unlinkKeyword } = useKeywords()
   const { products, loading: prodLoading } = useProducts()
   const { rankings, dates, loading: rankLoading } = useDashboardRankings(8)
+  const { limits } = useSettings()
   const [storeFilter, setStoreFilter] = useState('all')
   const narrow = useIsNarrow()
 
@@ -95,7 +97,7 @@ export default function Dashboard() {
               compact={narrow}
               onRemove={removeKeyword}
             />
-            <Legend />
+            <Legend maxRank={limits.maxRank} />
           </>
         )}
       </div>
@@ -287,13 +289,13 @@ function RankCell({ r }) {
   return <td className={`px-1 py-2 text-center font-mono text-xs sm:text-sm border-l border-gray-50 ${band}`}>{r.rank}</td>
 }
 
-function Legend() {
+function Legend({ maxRank = 100 }) {
   return (
     <div className="px-4 sm:px-6 py-2.5 border-t border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
       <span>数字は順位</span>
       <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-50 border border-green-100" />1〜10位</span>
       <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-yellow-50 border border-yellow-100" />11〜30位</span>
-      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-100 border border-gray-200" />圏外（101位以降）</span>
+      <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-100 border border-gray-200" />圏外（{maxRank + 1}位以降）</span>
       <span>「-」はその日のデータなし</span>
     </div>
   )

@@ -83,7 +83,8 @@ def _get_with_retry(session: requests.Session, url: str, label: str):
     return None
 
 
-def get_rakuten_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3) -> int | None:
+def get_rakuten_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3,
+                     max_rank: int = _MAX_RANK) -> int | None:
     """
     楽天市場でキーワード検索し、shop_id の商品のオーガニック順位を返す。
     item_id を指定すると特定商品のURLを照合する（より正確）。
@@ -118,9 +119,9 @@ def get_rakuten_rank(keyword: str, shop_id: str, item_id: str = None, max_pages:
                 continue
 
             organic_rank += 1
-            if organic_rank > _MAX_RANK:
+            if organic_rank > max_rank:
                 logger.info(
-                    f"  → {shop_id}/{item_id or '*'} は {_MAX_RANK}位以内に見つからず "
+                    f"  → {shop_id}/{item_id or '*'} は {max_rank}位以内に見つからず "
                     f"(keyword={keyword!r})"
                 )
                 return None

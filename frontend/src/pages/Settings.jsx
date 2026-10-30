@@ -28,7 +28,7 @@ export default function Settings() {
   const minutes  = estimateMinutes(jobs)
   const unlinked = unlinkedCount(keywords)
   const overJobs = limits.maxTotalJobs > 0 && jobs > limits.maxTotalJobs
-  const dirty    = ['maxKeywordsPerProduct', 'maxUnlinkedKeywords', 'maxTotalJobs']
+  const dirty    = ['maxKeywordsPerProduct', 'maxUnlinkedKeywords', 'maxTotalJobs', 'maxRank']
     .some(k => Number(form[k]) !== Number(limits[k]))
 
   const setNum = (key) => (e) => {
@@ -41,6 +41,7 @@ export default function Settings() {
       maxKeywordsPerProduct: Math.max(1, Number(form.maxKeywordsPerProduct) || 1),
       maxUnlinkedKeywords:   Math.max(0, Number(form.maxUnlinkedKeywords) || 0),
       maxTotalJobs:          Math.max(0, Number(form.maxTotalJobs) || 0),
+      maxRank:               Math.min(300, Math.max(10, Number(form.maxRank) || 50)),
     }
     setSaving(true)
     try {
@@ -120,6 +121,14 @@ export default function Settings() {
           <LimitInput label="商品あたりキーワード数" hint="1商品に紐づけられるキーワードの数" value={form.maxKeywordsPerProduct} onChange={setNum('maxKeywordsPerProduct')} unit="個" disabled={!loaded} />
           <LimitInput label="紐づけなしキーワード数" hint="商品に紐づけないキーワードの総数（CSV一括登録もここに含まれる）" value={form.maxUnlinkedKeywords} onChange={setNum('maxUnlinkedKeywords')} unit="件" disabled={!loaded} />
           <LimitInput label="全体ジョブ数" hint="1回の実行で検索する回数の上限。0 にすると無制限" value={form.maxTotalJobs} onChange={setNum('maxTotalJobs')} unit="件" disabled={!loaded} />
+          <LimitInput
+            label="追跡する順位の上限"
+            hint={`この順位より下は「圏外」として記録。楽天は1ページ45件・Yahooは30件なので、${form.maxRank || 50}位なら 楽天${Math.max(1, Math.ceil((Number(form.maxRank) || 50) / 45))}ページ・Yahoo${Math.max(1, Math.ceil((Number(form.maxRank) || 50) / 30))}ページを取得。小さいほど毎朝の実行が速い（10〜300）`}
+            value={form.maxRank}
+            onChange={setNum('maxRank')}
+            unit="位"
+            disabled={!loaded}
+          />
         </div>
         <div className="flex items-center gap-3 mt-5">
           {/* 変更が無いときは「保存済み」と明示する（薄く消えると壊れたように見えるため） */}

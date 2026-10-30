@@ -16,6 +16,7 @@ export const DEFAULT_LIMITS = {
   maxKeywordsPerProduct: 3,   // 商品1つに紐づけられるキーワード数
   maxUnlinkedKeywords:   20,  // 商品に紐づけないキーワードの総数
   maxTotalJobs:          1000, // 全体のジョブ数（0 = 無制限）
+  maxRank:               50,  // 追跡する順位の上限（これを超えたら「圏外」）。scraper/main.py が参照
 }
 
 const isActive = x => x?.active !== false

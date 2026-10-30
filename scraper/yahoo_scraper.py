@@ -84,7 +84,8 @@ def _get_with_retry(session: requests.Session, url: str, label: str):
     return None
 
 
-def get_yahoo_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3) -> int | None:
+def get_yahoo_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: int = 5, interval: int = 3,
+                   max_rank: int = _MAX_RANK) -> int | None:
     """
     Yahoo!ショッピングでキーワード検索し、shop_id の商品の最初の掲載順位を返す。
     item_id を指定すると特定商品コードで照合する（より正確）。
@@ -116,9 +117,9 @@ def get_yahoo_rank(keyword: str, shop_id: str, item_id: str = None, max_pages: i
 
         for shop, item in page_items:
             global_rank += 1
-            if global_rank > _MAX_RANK:
+            if global_rank > max_rank:
                 logger.info(
-                    f"  → {shop_id}/{item_id or '*'} は {_MAX_RANK}位以内に見つからず "
+                    f"  → {shop_id}/{item_id or '*'} は {max_rank}位以内に見つからず "
                     f"(keyword={keyword!r})"
                 )
                 return None

@@ -42,7 +42,9 @@ logger = logging.getLogger(__name__)
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
 MAX_WORKERS = 3
-SECONDS_PER_JOB = 7.5  # 1ジョブあたりの実測（2026-10-28 VPS: 209ジョブ=26分、3並列）
+SECONDS_PER_JOB = 7.5  # 1ジョブあたりの実測（2026-10-28 VPS: 209ジョブ=26分、3並列、上限100位時）
+RAKUTEN_PER_PAGE = 45  # 楽天検索結果の1ページあたり件数
+YAHOO_PER_PAGE   = 30  # Yahoo検索結果の1ページあたり件数（yahoo_scraper._RESULTS_PER_PAGE と同じ）
 
 
 def _estimate_jobs(keywords, product_map, store_map, stores) -> int:
@@ -80,12 +82,14 @@ def _scrape_one(kw_text, kw_id, store, store_id, item_id, product_id,
                 kw_text, store['shop_id'], item_id,
                 max_pages=s_cfg['rakuten_max_pages'],
                 interval=s_cfg['request_interval_sec'],
+                max_rank=s_cfg['max_rank'],
             )
         elif store['platform'] == 'yahoo':
             rank = get_yahoo_rank(
                 kw_text, store['shop_id'], item_id,
                 max_pages=s_cfg['yahoo_max_pages'],
                 interval=s_cfg['request_interval_sec'],
+                max_rank=s_cfg['max_rank'],
             )
         else:
             logger.warning(f"  [{label}] 未対応のプラットフォーム")
@@ -128,7 +132,17 @@ def run(dry_run: bool = False, platform: str = 'all'):
 
     config    = load_config()
     today     = today_jst()
-    s_cfg     = config['search']
+    settings  = get_settings()
+
+    # 追跡する順位の上限（ダッシュボードの設定）から、取得するページ数を決める。
+    # 楽天は1ページ45件、Yahooは1ページ30件。config.json のページ数は設定が無いときの保険。
+    max_rank = int(settings.get('maxRank') or 100)
+    s_cfg = {
+        **config['search'],
+        'max_rank':          max_rank,
+        'rakuten_max_pages': max(1, -(-max_rank // RAKUTEN_PER_PAGE)),
+        'yahoo_max_pages':   max(1, -(-max_rank // YAHOO_PER_PAGE)),
+    }
 
     # プラットフォーム絞り込み（rakuten / yahoo / all）。
     # store_map を絞ると、商品のstoreItemsも全店舗ループも自動的に対象外になる。
@@ -149,11 +163,11 @@ def run(dry_run: bool = False, platform: str = 'all'):
     # 画面側で登録時に上限を守らせているので、ここでは警告だけ出して実行は止めない。
     est_jobs = _estimate_jobs(keywords, product_map, store_map, stores)
     est_min  = round(est_jobs * SECONDS_PER_JOB / 60)
-    settings = get_settings()
     max_jobs = settings.get('maxTotalJobs') or 0
 
     logger.info(f"=== スクレイピング開始: {today} (platform={platform}) ===")
     logger.info(f"キーワード {len(keywords)}件 / 商品 {len(products)}件 / 対象店舗 {len(stores)}件 / 同時実行数 {MAX_WORKERS}")
+    logger.info(f"追跡上限 {max_rank}位（楽天 {s_cfg['rakuten_max_pages']}ページ / Yahoo {s_cfg['yahoo_max_pages']}ページ）")
     logger.info(f"想定ジョブ数 {est_jobs}件 / 約{est_min}分" + (f" / 上限 {max_jobs}件" if max_jobs else ""))
     if max_jobs and est_jobs > max_jobs:
         logger.warning(f"想定ジョブ数が上限を超えています（{est_jobs} > {max_jobs}）。ダッシュボードの取得設定を確認してください")
