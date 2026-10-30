@@ -31,6 +31,23 @@ export default function Products() {
 
   const sortedProducts = [...products].sort(bySku)
 
+  // 店舗ごとに「同じ商品コードを持つ商品」を集める。
+  // 例: 008-l / 008-m / 008-xl は楽天 annekor22 では1つのページ（ads_008）で売っているので、
+  //     annekor22 の順位は3商品で同じ値になる。表ではその旨を注釈として出す。
+  const sharedCodes = {}
+  for (const s of STORES) {
+    const bucket = {}
+    for (const p of products) {
+      const code = (p.storeItems?.[s.id] || '').trim()
+      if (code) (bucket[code] = bucket[code] || []).push(p)
+    }
+    sharedCodes[s.id] = Object.fromEntries(Object.entries(bucket).filter(([, ps]) => ps.length > 1))
+  }
+  const sharedWith = (p, storeId) => {
+    const code = (p.storeItems?.[storeId] || '').trim()
+    return (sharedCodes[storeId]?.[code] || []).filter(q => q.id !== p.id)
+  }
+
   const startEdit = (p) => {
     setEditingId(p.id)
     setEditForm({
@@ -260,10 +277,14 @@ export default function Products() {
                         <div className="mt-1.5 space-y-0.5">
                           {STORES.map(s => {
                             const code = p.storeItems?.[s.id]
+                            const others = sharedWith(p, s.id)
                             return code ? (
                               <p key={s.id} className="text-xs text-gray-500">
                                 <span className="text-gray-400">{s.label}:</span>{' '}
                                 <span className="font-mono">{code}</span>
+                                {others.length > 0 && (
+                                  <span className="ml-1 text-[10px] text-amber-700">（{others.map(q => q.sku || q.name).join(', ')} と同一ページ）</span>
+                                )}
                               </p>
                             ) : null
                           })}
@@ -323,11 +344,22 @@ export default function Products() {
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-600 font-mono text-xs whitespace-nowrap">{p.sku || <span className="text-gray-300">-</span>}</td>
                         <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
-                        {STORES.map(s => (
-                          <td key={s.id} className="px-4 py-3 text-gray-600 font-mono text-xs">
-                            {p.storeItems?.[s.id] || <span className="text-gray-300">-</span>}
-                          </td>
-                        ))}
+                        {STORES.map(s => {
+                          const others = sharedWith(p, s.id)
+                          return (
+                            <td key={s.id} className="px-4 py-3 text-gray-600 font-mono text-xs">
+                              {p.storeItems?.[s.id] || <span className="text-gray-300">-</span>}
+                              {others.length > 0 && (
+                                <span
+                                  className="block mt-0.5 font-sans text-[10px] text-amber-700"
+                                  title={`${s.label} では ${others.map(q => q.sku || q.name).join(' / ')} と同じ商品ページで販売しているため、順位は同じ値になります`}
+                                >
+                                  同一ページ: {others.map(q => q.sku || q.name).join(', ')}
+                                </span>
+                              )}
+                            </td>
+                          )
+                        })}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             onClick={() => startEdit(p)}

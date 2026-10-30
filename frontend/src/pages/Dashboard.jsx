@@ -130,6 +130,14 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
   const unlinked  = keywords.filter(k => !(k.productIds?.length))
   const totalCols = 1 + (showStoreColumn ? 1 : 0) + dates.length
 
+  // 同じ店舗で同じ商品コード（＝同じ商品ページ）を持つ他商品。順位が同じ値になる旨を注釈で出す
+  const sharedNotes = p => STORES.map(s => {
+    const code = (p.storeItems?.[s.id] || '').trim()
+    if (!code) return null
+    const others = products.filter(q => q.id !== p.id && (q.storeItems?.[s.id] || '').trim() === code)
+    return others.length ? `${s.label}は ${others.map(q => q.sku || q.name).join('・')} と同一ページ` : null
+  }).filter(Boolean)
+
   /** 1キーワードぶんの行（店舗ごとに1行）。storeList は対象店舗。 */
   const keywordRows = (kw, productId, storeList) => {
     if (storeList.length === 0) {
@@ -194,6 +202,11 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
                         {p.sku && <span className="text-[11px] font-mono text-gray-400 shrink-0">{p.sku}</span>}
                         <span className="font-medium text-gray-800 truncate">{p.name}</span>
                         <span className="text-xs text-gray-400 shrink-0">{linked.length}キーワード</span>
+                        {sharedNotes(p).map(n => (
+                          <span key={n} className="hidden sm:inline text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0" title="同じ商品ページで販売しているため、その店舗の順位は同じ値になります">
+                            {n}
+                          </span>
+                        ))}
                       </div>
                       <Link
                         to={`/product-rankings?product=${p.id}`}
