@@ -4,6 +4,7 @@ import { useKeywords } from '../hooks/useKeywords'
 import { useProducts } from '../hooks/useProducts'
 import { useDashboardRankings } from '../hooks/useRankings'
 import { STORES, STORE_COLORS } from '../lib/stores'
+import { RUN_TIME_LABEL } from '../lib/schedule'
 
 /** 'YYYY-MM-DD' → 'M/D' */
 const fmtDate = d => `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}`
@@ -68,7 +69,7 @@ export default function Dashboard() {
         ) : rankings.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <p className="text-gray-400 text-sm mb-1">順位データがまだありません。</p>
-            <p className="text-gray-300 text-xs">毎日 07:00 の自動取得をお待ちください（実行状況は「設定」タブ）。</p>
+            <p className="text-gray-300 text-xs">毎日 {RUN_TIME_LABEL} の自動取得をお待ちください（実行状況は「設定」タブ）。</p>
           </div>
         ) : (
           <>

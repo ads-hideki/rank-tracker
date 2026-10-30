@@ -5,6 +5,7 @@ import { useSettings } from '../hooks/useSettings'
 import { useScrapeRequest } from '../hooks/useScrapeRequest'
 import { PlatformStatus } from '../components/ScrapeStatus'
 import { estimateJobs, estimateMinutes, unlinkedCount, SECONDS_PER_JOB } from '../lib/limits'
+import { RUN_TIME_LABEL, endTimeAfter } from '../lib/schedule'
 
 /**
  * 設定ページ。自動取得の実行状況と、登録上限（取得設定）の表示・変更。
@@ -61,7 +62,7 @@ export default function Settings() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-700">自動取得ステータス</h3>
-          <span className="text-[11px] text-gray-400">毎日 07:00 にVPSで自動実行</span>
+          <span className="text-[11px] text-gray-400">毎日 {RUN_TIME_LABEL} にVPSで自動実行</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <PlatformStatus
@@ -90,7 +91,7 @@ export default function Settings() {
           <Row label="想定実行時間">
             <span className="font-semibold text-gray-800">
               約 {minutes} 分
-              <span className="font-normal text-gray-400">（07:00 開始なら {endTime(minutes)} 完了）</span>
+              <span className="font-normal text-gray-400">（{RUN_TIME_LABEL} 開始なら {endTimeAfter(minutes)} 完了）</span>
             </span>
           </Row>
           <Row label="紐づけなしキーワード">
@@ -166,10 +167,3 @@ function LimitInput({ label, hint, value, onChange, unit, disabled }) {
   )
 }
 
-/** 07:00 開始として minutes 分後の時刻を「HH:MM」で返す。 */
-function endTime(minutes) {
-  const total = 7 * 60 + minutes
-  const h = Math.floor(total / 60) % 24
-  const m = total % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
