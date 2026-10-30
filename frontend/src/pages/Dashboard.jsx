@@ -23,11 +23,23 @@ function useIsNarrow(maxWidth = 640) {
 }
 
 export default function Dashboard() {
-  const { keywords, loading: kwLoading } = useKeywords()
+  const { keywords, loading: kwLoading, unlinkKeyword } = useKeywords()
   const { products, loading: prodLoading } = useProducts()
   const { rankings, dates, loading: rankLoading } = useDashboardRankings(8)
   const [storeFilter, setStoreFilter] = useState('all')
   const narrow = useIsNarrow()
+
+  // キーワード行の「×」: その商品からキーワードを外す。他に紐づく商品が無ければキーワード自体を削除。
+  const removeKeyword = async (kw, productId) => {
+    const others = (kw.productIds || []).filter(id => id !== productId).length
+    const msg = productId
+      ? (others > 0
+        ? `「${kw.text}」をこの商品から外しますか？（他 ${others} 商品の紐づけは残ります）`
+        : `「${kw.text}」をこの商品から外しますか？\n他に紐づく商品が無いため、キーワード自体を削除します（過去の順位データは残ります）。`)
+      : `「${kw.text}」を削除しますか？（商品に紐づけないキーワードのため、キーワード自体を削除します）`
+    if (!window.confirm(msg)) return
+    await unlinkKeyword(kw.id, productId)
+  }
 
   const shownDates    = narrow ? dates.slice(0, 4) : dates
   const today         = dates[0]
@@ -81,6 +93,7 @@ export default function Dashboard() {
               stores={storeFilter === 'all' ? STORES : STORES.filter(s => s.id === storeFilter)}
               showStoreColumn={storeFilter === 'all'}
               compact={narrow}
+              onRemove={removeKeyword}
             />
             <Legend />
           </>
@@ -116,7 +129,23 @@ function StoreFilter({ value, onChange }) {
  * 全店舗表示のときはキーワードのセルを rowSpan で店舗数ぶん結合し、店舗を縦に積む。
  * 商品に紐づけないキーワードは末尾に別グループ（店舗単位の順位）。
  */
-function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn, compact = false }) {
+function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn, compact = false, onRemove }) {
+  /** キーワード名＋「×」（その商品からキーワードを外す） */
+  const KwLabel = ({ kw, productId }) => (
+    <span className="inline-flex items-start gap-1.5">
+      <span>{kw.text}</span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(kw, productId)}
+          title="この商品からキーワードを外す"
+          className="text-gray-300 hover:text-red-500 leading-none text-sm shrink-0"
+        >
+          ×
+        </button>
+      )}
+    </span>
+  )
   const sortedProducts = [...products].sort((a, b) => {
     if (!a.sku && !b.sku) return 0
     if (!a.sku) return 1
@@ -144,7 +173,7 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
     if (storeList.length === 0) {
       return (
         <tr key={kw.id} className="border-b border-gray-100">
-          <td className="px-3 sm:px-4 py-2 sm:pl-8 text-gray-700 text-sm break-words">{kw.text}</td>
+          <td className="px-3 sm:px-4 py-2 sm:pl-8 text-gray-700 text-sm break-words"><KwLabel kw={kw} productId={productId} /></td>
           {showStoreColumn && <td />}
           <td colSpan={dates.length} className="px-3 py-2 text-xs text-gray-300">この店舗の商品コードが未設定</td>
         </tr>
@@ -154,7 +183,7 @@ function RankGrid({ products, keywords, rankings, dates, stores, showStoreColumn
       <tr key={`${kw.id}_${s.id}`} className={`hover:bg-gray-50 transition-colors ${i === storeList.length - 1 ? 'border-b border-gray-100' : ''}`}>
         {i === 0 && (
           <td rowSpan={storeList.length} className="px-3 sm:px-4 py-2 sm:pl-8 text-gray-700 text-sm break-words align-top border-r border-gray-50">
-            {kw.text}
+            <KwLabel kw={kw} productId={productId} />
           </td>
         )}
         {showStoreColumn && (

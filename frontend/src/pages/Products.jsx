@@ -3,8 +3,9 @@ import { useProducts } from '../hooks/useProducts'
 import { useKeywords } from '../hooks/useKeywords'
 import { useSettings } from '../hooks/useSettings'
 import { STORES } from '../lib/stores'
-import { checkNewProduct } from '../lib/limits'
+import { checkNewProduct, checkKeywordAssignment } from '../lib/limits'
 import { TEPS, fetchTepsSkuMaster, buildCandidates, splitNewAndExisting } from '../lib/teps'
+import ProductKeywords from '../components/ProductKeywords'
 
 const emptyStoreItems = () => Object.fromEntries(STORES.map(s => [s.id, '']))
 
@@ -18,8 +19,26 @@ const bySku = (a, b) => {
 
 export default function Products() {
   const { products, loading, addProduct, removeProduct, updateProduct } = useProducts()
-  const { keywords, updateKeyword } = useKeywords()
+  const { keywords, updateKeyword, findByText, addKeywordToProduct, unlinkKeyword } = useKeywords()
   const { limits } = useSettings()
+
+  // 商品側からのキーワード追加・削除（登録上限のチェックつき）
+  const handleAddKeyword = async (p, text) => {
+    const existing = findByText(text)
+    const check = checkKeywordAssignment({
+      keywords, products, limits,
+      keywordId: existing?.id ?? null,
+      productIds: [...new Set([...(existing?.productIds || []), p.id])],
+    })
+    if (!check.ok) return check
+    const r = await addKeywordToProduct(text, p.id)
+    showToast(r?.created ? `「${text.trim()}」を作成して紐づけました` : `「${text.trim()}」を紐づけました`)
+    return { ok: true }
+  }
+  const handleRemoveKeyword = async (p, kw) => {
+    const r = await unlinkKeyword(kw.id, p.id)
+    showToast(r === 'deleted' ? `「${kw.text}」を削除しました` : `「${kw.text}」をこの商品から外しました`, 'info')
+  }
   const [form, setForm] = useState({ name: '', sku: '', storeItems: emptyStoreItems() })
   const [selectedKeywordIds, setSelectedKeywordIds] = useState([])
   const [adding, setAdding] = useState(false)
@@ -274,6 +293,16 @@ export default function Products() {
                           {p.sku && <span className="font-mono text-xs text-gray-400 mr-2">{p.sku}</span>}
                           {p.name}
                         </p>
+                        <div className="mt-2">
+                          <ProductKeywords
+                            compact
+                            product={p}
+                            keywords={keywords}
+                            max={limits.maxKeywordsPerProduct}
+                            onAdd={text => handleAddKeyword(p, text)}
+                            onRemove={kw => handleRemoveKeyword(p, kw)}
+                          />
+                        </div>
                         <div className="mt-1.5 space-y-0.5">
                           {STORES.map(s => {
                             const code = p.storeItems?.[s.id]
@@ -317,6 +346,10 @@ export default function Products() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">品番（SKU）</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">商品名</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
+                      キーワード<br />
+                      <span className="font-normal text-gray-400">× で外す・＋で追加</span>
+                    </th>
                     {STORES.map(s => (
                       <th key={s.id} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
                         {s.label}<br />
@@ -330,7 +363,7 @@ export default function Products() {
                   {sortedProducts.map(p => (
                     editingId === p.id ? (
                       <tr key={p.id} className="bg-blue-50/30">
-                        <td colSpan={3 + STORES.length} className="px-5 py-4">
+                        <td colSpan={4 + STORES.length} className="px-5 py-4">
                           <ProductEditForm
                             form={editForm}
                             setForm={setEditForm}
@@ -344,6 +377,15 @@ export default function Products() {
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-600 font-mono text-xs whitespace-nowrap">{p.sku || <span className="text-gray-300">-</span>}</td>
                         <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
+                        <td className="px-4 py-3 align-top min-w-[220px]">
+                          <ProductKeywords
+                            product={p}
+                            keywords={keywords}
+                            max={limits.maxKeywordsPerProduct}
+                            onAdd={text => handleAddKeyword(p, text)}
+                            onRemove={kw => handleRemoveKeyword(p, kw)}
+                          />
+                        </td>
                         {STORES.map(s => {
                           const others = sharedWith(p, s.id)
                           return (
