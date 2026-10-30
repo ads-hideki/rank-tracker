@@ -122,14 +122,20 @@ export default function Settings() {
           <LimitInput label="全体ジョブ数" hint="1回の実行で検索する回数の上限。0 にすると無制限" value={form.maxTotalJobs} onChange={setNum('maxTotalJobs')} unit="件" disabled={!loaded} />
         </div>
         <div className="flex items-center gap-3 mt-5">
+          {/* 変更が無いときは「保存済み」と明示する（薄く消えると壊れたように見えるため） */}
           <button
             onClick={save}
             disabled={!dirty || saving || !loaded}
-            className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className={`px-5 py-2 text-sm font-medium rounded-lg transition-colors ${
+              dirty
+                ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60'
+                : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-default'
+            }`}
           >
-            {saving ? '保存中...' : '保存'}
+            {saving ? '保存中...' : dirty ? '保存' : '保存済み ✓'}
           </button>
-          {msg && <span className="text-xs text-gray-500">{msg}</span>}
+          {msg && <span className={`text-xs ${msg.includes('失敗') ? 'text-red-600' : 'text-green-700'}`}>{msg}</span>}
+          {!msg && dirty && <span className="text-xs text-gray-400">変更があります</span>}
         </div>
       </div>
     </div>
