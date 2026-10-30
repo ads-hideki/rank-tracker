@@ -141,7 +141,7 @@ export default function Products() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-3xl">
+    <div className="p-4 sm:p-6 max-w-6xl">
       <h2 className="text-lg font-bold text-gray-900 mb-6">商品マスタ管理</h2>
 
       {toast && (
@@ -340,23 +340,31 @@ export default function Products() {
             </ul>
 
             {/* デスクトップ：テーブル表示 */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full text-sm">
+            {/* PC表示：列幅を固定して枠の幅に必ず収める（横にはみ出さない）。長い値は折り返す */}
+            <div className="hidden md:block">
+              <table className="w-full table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[92px]" />
+                  <col />
+                  <col className="w-[30%]" />
+                  {STORES.map(s => <col key={s.id} className="w-[112px]" />)}
+                  <col className="w-[64px]" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">品番（SKU）</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">商品名</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">品番</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">商品名</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">
                       キーワード<br />
                       <span className="font-normal text-gray-400">× で外す・＋で追加</span>
                     </th>
                     {STORES.map(s => (
-                      <th key={s.id} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
+                      <th key={s.id} className="px-2 py-3 text-left text-xs font-semibold text-gray-500 leading-tight">
                         {s.label}<br />
                         <span className="font-normal text-gray-400">商品コード</span>
                       </th>
                     ))}
-                    <th className="px-4 py-3" />
+                    <th className="px-2 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -374,10 +382,10 @@ export default function Products() {
                         </td>
                       </tr>
                     ) : (
-                      <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-600 font-mono text-xs whitespace-nowrap">{p.sku || <span className="text-gray-300">-</span>}</td>
-                        <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
-                        <td className="px-4 py-3 align-top min-w-[220px]">
+                      <tr key={p.id} className="hover:bg-gray-50 align-top">
+                        <td className="px-3 py-3 text-gray-600 font-mono text-xs break-all">{p.sku || <span className="text-gray-300">-</span>}</td>
+                        <td className="px-3 py-3 font-medium text-gray-800 break-words">{p.name}</td>
+                        <td className="px-3 py-3">
                           <ProductKeywords
                             product={p}
                             keywords={keywords}
@@ -389,11 +397,11 @@ export default function Products() {
                         {STORES.map(s => {
                           const others = sharedWith(p, s.id)
                           return (
-                            <td key={s.id} className="px-4 py-3 text-gray-600 font-mono text-xs">
+                            <td key={s.id} className="px-2 py-3 text-gray-600 font-mono text-xs break-all">
                               {p.storeItems?.[s.id] || <span className="text-gray-300">-</span>}
                               {others.length > 0 && (
                                 <span
-                                  className="block mt-0.5 font-sans text-[10px] text-amber-700"
+                                  className="block mt-0.5 font-sans text-[10px] text-amber-700 break-words"
                                   title={`${s.label} では ${others.map(q => q.sku || q.name).join(' / ')} と同じ商品ページで販売しているため、順位は同じ値になります`}
                                 >
                                   同一ページ: {others.map(q => q.sku || q.name).join(', ')}
@@ -402,19 +410,21 @@ export default function Products() {
                             </td>
                           )
                         })}
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => startEdit(p)}
-                            className="text-xs text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded hover:bg-blue-50"
-                          >
-                            編集
-                          </button>
-                          <button
-                            onClick={() => handleRemove(p)}
-                            className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            削除
-                          </button>
+                        <td className="px-2 py-2">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <button
+                              onClick={() => startEdit(p)}
+                              className="text-xs text-blue-500 hover:text-blue-700 transition-colors px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap"
+                            >
+                              編集
+                            </button>
+                            <button
+                              onClick={() => handleRemove(p)}
+                              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50 whitespace-nowrap"
+                            >
+                              削除
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
