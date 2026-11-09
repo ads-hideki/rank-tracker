@@ -41,6 +41,32 @@ def get_active_products():
     docs = get_db().collection('products').where('active', '==', True).stream()
     return [{'id': d.id, **d.to_dict()} for d in docs]
 
+def daily_key(keyword_id: str, store_id: str, product_id) -> str:
+    """daily/{date}.entries のキー。ダッシュボード側（useRankings.js）と同じ形式にすること。"""
+    return f"{keyword_id}|{store_id}|{product_id or ''}"
+
+
+def build_daily_entries(rows) -> dict:
+    """rankings のドキュメント（dict の列）→ daily/{date}.entries 用の {key: rank}。"""
+    return {daily_key(r.get('keywordId'), r.get('storeId'), r.get('productId')): r.get('rank') for r in rows}
+
+
+def write_daily_summary(date_str: str, entries: dict, note: str = ''):
+    """
+    その日の全結果を1ドキュメント daily/{date} にまとめて書く。
+    ダッシュボードはこれを読む（8日分で8読み取り）。以前は rankings を直接読んでいて
+    1回の表示で3,000読み取り超になり、Firestore 無料枠（5万/日）を使い切ったため。
+    rankings（1件1ドキュメント）は商品別の30日推移などのためにそのまま残す。
+    """
+    get_db().collection('daily').document(date_str).set({
+        'date':      date_str,
+        'count':     len(entries),
+        'entries':   entries,
+        'updatedAt': firestore.SERVER_TIMESTAMP,
+        'note':      note,
+    }, merge=True)
+
+
 def save_ranking(keyword_id: str, store_id: str, rank, date_str: str, product_id: str = None):
     parts = [date_str, store_id, keyword_id]
     if product_id:

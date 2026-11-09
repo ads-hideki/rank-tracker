@@ -69,8 +69,11 @@ def load_config() -> dict:
 
 
 def _scrape_one(kw_text, kw_id, store, store_id, item_id, product_id,
-                s_cfg, today, dry_run) -> bool:
-    """1店舗×1キーワードを実行。成功なら True を返す。"""
+                s_cfg, today, dry_run):
+    """
+    1店舗×1キーワードを実行。
+    戻り値: (成功したか, 結果) 。結果は {'keywordId','storeId','productId','rank'}（日次サマリー用）。
+    """
     from rakuten_scraper import get_rakuten_rank
     from yahoo_scraper import get_yahoo_rank
     from firebase_client import save_ranking
@@ -93,14 +96,14 @@ def _scrape_one(kw_text, kw_id, store, store_id, item_id, product_id,
             )
         else:
             logger.warning(f"  [{label}] 未対応のプラットフォーム")
-            return True
+            return True, None
         logger.info(f"  [{label}] → {f'{rank}位' if rank else '圏外'}")
         if not dry_run:
             save_ranking(kw_id, store_id, rank, today, product_id)
-        return True
+        return True, {'keywordId': kw_id, 'storeId': store_id, 'productId': product_id, 'rank': rank}
     except Exception as e:
         logger.error(f"  [{label}] エラー: {e}", exc_info=True)
-        return False
+        return False, None
 
 
 def _update_platform_status(platforms, status: str, message: str = '',
@@ -177,8 +180,9 @@ def run(dry_run: bool = False, platform: str = 'all'):
         # ダッシュボードに「実行中」を表示させる
         _update_platform_status(run_platforms, 'running', f'想定 {est_jobs}件 / 約{est_min}分', 'startedAt')
 
-    total  = 0
-    errors = 0
+    total   = 0
+    errors  = 0
+    results = []   # 日次サマリー daily/{date} 用。list.append はスレッド安全
 
     try:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -215,8 +219,11 @@ def run(dry_run: bool = False, platform: str = 'all'):
                         }
                         for future in as_completed(futures):
                             total += 1
-                            if not future.result():
+                            ok, rec = future.result()
+                            if not ok:
                                 errors += 1
+                            elif rec:
+                                results.append(rec)
 
                 else:
                     # 商品紐づきなし：全店舗を並列実行
@@ -234,12 +241,22 @@ def run(dry_run: bool = False, platform: str = 'all'):
                     }
                     for future in as_completed(futures):
                         total += 1
-                        if not future.result():
+                        ok, rec = future.result()
+                        if not ok:
                             errors += 1
+                        elif rec:
+                            results.append(rec)
 
         msg = f"成功 {total - errors}件 / エラー {errors}件"
         logger.info(f"=== 完了: {msg} ===")
         if not dry_run:
+            # ダッシュボード用の日次サマリー（1日1ドキュメント）。失敗しても本体の結果は保存済み
+            try:
+                from firebase_client import build_daily_entries, write_daily_summary
+                write_daily_summary(today, build_daily_entries(results), note=f'platform={platform}')
+                logger.info(f"日次サマリー daily/{today} を更新（{len(results)}件）")
+            except Exception as e:
+                logger.warning(f'日次サマリーの書き込み失敗（無視）: {e}')
             _update_platform_status(run_platforms, 'done', msg)
 
     except Exception as e:

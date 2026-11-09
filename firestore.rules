@@ -19,6 +19,12 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // 日次サマリー（1日1ドキュメントに全順位をまとめたもの。ダッシュボードはこちらを読む）
+    match /daily/{date} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+
     // 順位データ: ログインユーザーのみ読み取り可。
     // 書き込みはスクレイパー（Firebase Admin SDK）のみ。
     // Admin SDK はこのルールを bypass するため allow write: if false でよい。

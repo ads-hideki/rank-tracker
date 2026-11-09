@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, query, where, orderBy, onSnapshot, limit,
+  collection, query, where, orderBy, onSnapshot, limit, documentId,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
@@ -130,7 +130,12 @@ export function useTodayRankings() {
 }
 
 // 本日〜7日前の8日分（ダッシュボードの順位一覧用）
-// in クエリで8日分を1クエリで取得。dates は新しい順（[0] が本日）
+//
+// 以前は rankings（1件1ドキュメント）を date in [8日分] で読んでいたが、
+// 1回の表示で 3,000〜4,000 ドキュメントの読み取りになり、Firestore 無料枠（5万/日）を使い切った。
+// 今は scraper/main.py が毎日 daily/{date} に全結果を1ドキュメントへまとめて書くので、
+// それを 8 件読むだけにしている（キーの形式は firebase_client.daily_key と同じ "keywordId|storeId|productId"）。
+// dates は新しい順（[0] が本日）。
 export function useDashboardRankings(days = 8) {
   const [rankings, setRankings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -141,13 +146,21 @@ export function useDashboardRankings(days = 8) {
 
   useEffect(() => {
     const q = query(
-      collection(db, 'rankings'),
-      where('date', 'in', dates),
+      collection(db, 'daily'),
+      where(documentId(), 'in', dates),
     )
     const unsub = onSnapshot(
       q,
       snap => {
-        setRankings(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        const rows = []
+        for (const d of snap.docs) {
+          const { date, entries } = d.data()
+          for (const [k, rank] of Object.entries(entries || {})) {
+            const [keywordId, storeId, productId] = k.split('|')
+            rows.push({ id: `${date}_${k}`, date, keywordId, storeId, productId: productId || undefined, rank: rank ?? null })
+          }
+        }
+        setRankings(rows)
         setLoading(false)
       },
       err => {
